@@ -28,7 +28,7 @@ Invoke-Adb @('install', '-r', '-d', $Apk) | Out-Null
 Invoke-Adb @('shell', 'monkey', '-p', 'com.shinycolors.officialbot', '1') | Out-Null
 Start-Sleep -Seconds 3
 $activity = Invoke-Adb @('shell', 'dumpsys', 'activity', 'activities')
-if ($activity -notmatch 'topResumedActivity=.*com\.shinycolors\.officialbot/.MainActivity') { throw 'MainActivity 没有进入前台' }
+if ($activity -notmatch '(topResumedActivity|ResumedActivity):?=.*com\.shinycolors\.officialbot/.MainActivity' -and $activity -notmatch 'Resumed: ActivityRecord.*com\.shinycolors\.officialbot/.MainActivity') { throw 'MainActivity 没有进入前台' }
 $uiPath = '/sdcard/qqbotcp-smoke-ui.xml'
 Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
 $ui = Invoke-Adb @('shell', 'cat', $uiPath)
