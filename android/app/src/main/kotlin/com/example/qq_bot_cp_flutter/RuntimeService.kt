@@ -27,6 +27,7 @@ class RuntimeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        RuntimeEventBus.setContext(this)
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "QQ-bot-CP Runtime", NotificationManager.IMPORTANCE_LOW))
         startForeground(NOTIFICATION_ID, notification("正在启动 Runtime"))

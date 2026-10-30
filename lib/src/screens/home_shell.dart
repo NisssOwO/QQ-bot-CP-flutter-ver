@@ -47,9 +47,21 @@ class _HomeShellState extends State<HomeShell> {
         if (_logs.length > 500) _logs.removeAt(0);
       });
     });
+    _loadRecentLogs();
     _refreshState();
     _refreshConfig();
     _refreshPublicIp();
+  }
+
+  Future<void> _loadRecentLogs() async {
+    try {
+      final recent = await _bridge.recentLogs();
+      if (!mounted) return;
+      setState(() {
+        _logs.addAll(recent);
+        if (_logs.length > 500) _logs.removeRange(0, _logs.length - 500);
+      });
+    } catch (_) { }
   }
 
   @override

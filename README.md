@@ -8,6 +8,7 @@
 - 应用名称：`QQ-bot-CP`
 - 最低 Android SDK：24（Android 7.0）；目标 SDK：36
 - 当前验证设备：Android 16、`arm64-v8a`
+- 最近一次 Android 16 实机烟测：新包安装成功，空配置首页、设置页、角色页和小组件 Provider 检查通过；未启动真实 Runtime。
 - Flutter 版本：3.47.9 stable
 - JDK：17
 - 当前 Debug APK 约 330 MB；正式发布前仍需完成签名、ABI 和安装升级验收

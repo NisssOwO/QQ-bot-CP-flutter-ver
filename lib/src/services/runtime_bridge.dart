@@ -25,20 +25,17 @@ class RuntimeBridge {
   }
 
   Stream<RuntimeLogEntry> get logs => _events.receiveBroadcastStream().where((event) => event is Map).cast<Map>().map((raw) {
-        final level = LogLevel.values.firstWhere(
-          (value) => value.name == raw['level'],
-          orElse: () => LogLevel.info,
-        );
-        return RuntimeLogEntry(
-          time: DateTime.tryParse('${raw['time']}') ?? DateTime.now(),
-          level: level,
-          module: '${raw['module'] ?? 'runtime'}',
-          message: '${raw['message'] ?? ''}',
-          elapsedMs: raw['elapsedMs'] as int?,
-          runId: raw['runId'] as String?,
-          errorCode: raw['errorCode'] as String?,
-        );
+        return _parseLog(raw);
       });
+
+  RuntimeLogEntry _parseLog(Map raw) {
+    final level = LogLevel.values.firstWhere((value) => value.name == raw['level'], orElse: () => LogLevel.info);
+    final rawTime = raw['time'];
+    final time = rawTime is num ? DateTime.fromMillisecondsSinceEpoch(rawTime.toInt()) : DateTime.tryParse('$rawTime') ?? DateTime.now();
+    return RuntimeLogEntry(time: time, level: level, module: '${raw['module'] ?? 'runtime'}', message: '${raw['message'] ?? ''}', elapsedMs: (raw['elapsedMs'] as num?)?.toInt(), runId: raw['runId'] as String?, errorCode: raw['errorCode'] as String?);
+  }
+
+  Future<List<RuntimeLogEntry>> recentLogs() async => (await _call<List<dynamic>>('getRecentLogs', null, const Duration(seconds: 12), 2) ?? const []).whereType<Map>().map(_parseLog).toList();
 
   Future<void> start() async { await _call<void>('startRuntime'); }
   Future<void> stop() async { await _call<void>('stopRuntime'); }
