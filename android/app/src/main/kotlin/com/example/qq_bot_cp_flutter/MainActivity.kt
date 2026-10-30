@@ -302,6 +302,7 @@ class MainActivity : FlutterActivity() {
                 getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("public-config-history", MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("credentialsConfigured", false).remove("runtimeLastOutput").remove("runtimeLastError").apply()
+                removeCustomRuntimePresets()
             }
         }
     }
@@ -466,6 +467,7 @@ class MainActivity : FlutterActivity() {
                 if (id.startsWith("custom.") && prompt.isNotBlank()) migrated.put(JSONObject().put("id", id).put("displayName", role.optString("displayName", id)).put("prompt", prompt))
             }
             getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", migrated.toString()).apply()
+            syncCustomRuntimePresets(migrated)
             getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
             return
         } else {
@@ -475,7 +477,36 @@ class MainActivity : FlutterActivity() {
         getSharedPreferences("theme", MODE_PRIVATE).edit().putString("mode", theme.optString("mode", "dark")).putInt("seedColor", theme.optInt("seedColor", 0xff8290ff.toInt())).putFloat("cardRadius", theme.optDouble("cardRadius", 16.0).toFloat()).putFloat("cardOpacity", theme.optDouble("cardOpacity", 1.0).toFloat()).putBoolean("tintedBackground", theme.optBoolean("tintedBackground", false)).apply()
         val role = json.optJSONObject("defaultRole") ?: JSONObject()
         getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("id", role.optString("id", "")).putString("name", role.optString("name", "")).putString("prompt", role.optString("prompt", "")).apply()
-        getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", (json.optJSONArray("roleCards") ?: org.json.JSONArray()).toString()).apply()
+        val cards = json.optJSONArray("roleCards") ?: org.json.JSONArray()
+        getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", cards.toString()).apply()
+        syncCustomRuntimePresets(cards)
+    }
+
+    private fun syncCustomRuntimePresets(cards: org.json.JSONArray) {
+        val directory = File(filesDir, "runtime/presets").apply { mkdirs() }
+        removeCustomRuntimePresets()
+        for (index in 0 until cards.length()) {
+            val card = cards.optJSONObject(index) ?: continue
+            val id = card.optString("id", "")
+            val prompt = card.optString("prompt", "")
+            if (!Regex("custom\\.[a-z0-9][a-z0-9._-]{0,48}").matches(id) || prompt.isBlank()) continue
+            File(directory, "preset.$id.md").writeText(prompt, Charsets.UTF_8)
+            File(directory, "preset.$id.json").writeText(JSONObject().put("id", id).put("displayName", card.optString("displayName", id)).put("builtin", false).toString(), Charsets.UTF_8)
+        }
+    }
+
+    private fun removeCustomRuntimePresets() {
+        val directory = File(filesDir, "runtime/presets")
+        directory.listFiles()?.forEach { file ->
+            if (!file.name.startsWith("preset.") || !file.name.endsWith(".json")) return@forEach
+            try {
+                val id = JSONObject(file.readText()).optString("id", "")
+                if (id.startsWith("custom.")) {
+                    file.delete()
+                    File(directory, file.name.removeSuffix(".json") + ".md").delete()
+                }
+            } catch (_: Exception) { }
+        }
     }
 
     private fun validateApk(file: File): Map<String, String> {
