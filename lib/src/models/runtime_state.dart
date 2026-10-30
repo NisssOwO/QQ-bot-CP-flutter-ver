@@ -13,6 +13,8 @@ class RuntimeState {
     this.networkStatus = '未知',
     this.reconnectAttempts = 0,
     this.nextRetryMs = 0,
+    this.qqFailureCount = 0,
+    this.aiFailureCount = 0,
   });
 
   final RuntimeStatus status;
@@ -25,6 +27,8 @@ class RuntimeState {
   final String networkStatus;
   final int reconnectAttempts;
   final int nextRetryMs;
+  final int qqFailureCount;
+  final int aiFailureCount;
 
   RuntimeState copyWith({
     RuntimeStatus? status,
@@ -37,6 +41,8 @@ class RuntimeState {
     String? networkStatus,
     int? reconnectAttempts,
     int? nextRetryMs,
+    int? qqFailureCount,
+    int? aiFailureCount,
   }) => RuntimeState(
         status: status ?? this.status,
         phase: phase ?? this.phase,
@@ -48,6 +54,8 @@ class RuntimeState {
         networkStatus: networkStatus ?? this.networkStatus,
         reconnectAttempts: reconnectAttempts ?? this.reconnectAttempts,
         nextRetryMs: nextRetryMs ?? this.nextRetryMs,
+        qqFailureCount: qqFailureCount ?? this.qqFailureCount,
+        aiFailureCount: aiFailureCount ?? this.aiFailureCount,
       );
 }
 

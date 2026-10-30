@@ -167,6 +167,8 @@ class _OverviewPage extends StatelessWidget {
           Chip(avatar: const Icon(Icons.auto_awesome, size: 16), label: Text('AI：${state.aiStatus}')),
           Chip(avatar: const Icon(Icons.wifi, size: 16), label: Text('网络：${state.networkStatus}')),
           if (state.reconnectAttempts > 0) Chip(label: Text('第 ${state.reconnectAttempts} 次重连 · ${state.nextRetryMs ~/ 1000}s')),
+          if (state.qqFailureCount > 0) Chip(label: Text('QQ 失败 ${state.qqFailureCount} 次')),
+          if (state.aiFailureCount > 0) Chip(label: Text('AI 失败 ${state.aiFailureCount} 次')),
         ]))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [const Expanded(child: Text('设备公网 IP', style: TextStyle(fontWeight: FontWeight.bold))), IconButton(tooltip: hideIp ? '显示 IP' : '隐藏 IP', onPressed: onToggleHideIp, icon: Icon(hideIp ? Icons.visibility_off : Icons.visibility)), loadingIp ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : IconButton(tooltip: '刷新', onPressed: onRefreshIp, icon: const Icon(Icons.refresh))]),

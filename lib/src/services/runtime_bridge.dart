@@ -56,6 +56,8 @@ class RuntimeBridge {
       networkStatus: '${raw['networkStatus'] ?? '未知'}',
       reconnectAttempts: (raw['reconnectAttempts'] as num?)?.toInt() ?? 0,
       nextRetryMs: (raw['nextRetryMs'] as num?)?.toInt() ?? 0,
+      qqFailureCount: (raw['qqFailureCount'] as num?)?.toInt() ?? 0,
+      aiFailureCount: (raw['aiFailureCount'] as num?)?.toInt() ?? 0,
     );
   }
 
