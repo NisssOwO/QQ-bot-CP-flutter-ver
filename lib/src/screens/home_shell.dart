@@ -61,7 +61,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       _OverviewPage(state: _state, publicIp: _publicIp, onRefreshIp: () => setState(() => _publicIp = '查询接口待接入')),
-      const _PlaceholderPage(title: 'AI 配置', message: '协议、模型、Base URL 和 API Key 将保持空白，接入配置模块后填写。'),
+      _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
       const _PlaceholderPage(title: '设置', message: '更新、后台运行、主题和小组件设置将在后续 P0/P1 阶段接入。'),
     ];
@@ -118,6 +118,51 @@ class _LogPage extends StatelessWidget {
       );
 }
 
+class _ConfigPage extends StatefulWidget {
+  const _ConfigPage({required this.bridge});
+  final RuntimeBridge bridge;
+  @override State<_ConfigPage> createState() => _ConfigPageState();
+}
+
+class _ConfigPageState extends State<_ConfigPage> {
+  final protocol = TextEditingController();
+  final model = TextEditingController();
+  final baseUrl = TextEditingController();
+  final appId = TextEditingController();
+  final secret = TextEditingController();
+  final apiKey = TextEditingController();
+  bool loading = true;
+
+  @override
+  void initState() { super.initState(); _load(); }
+  @override
+  void dispose() { for (final c in [protocol, model, baseUrl, appId, secret, apiKey]) { c.dispose(); } super.dispose(); }
+  Future<void> _load() async {
+    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; }
+    finally { if (mounted) setState(() => loading = false); }
+  }
+  Future<void> _save() async {
+    await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), appId: appId.text.trim(), secret: secret.text, apiKey: apiKey.text);
+    secret.clear(); apiKey.clear();
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
+  }
+  @override
+  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
+    const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 16),
+    _field(protocol, '接口类型', 'openai-compatible / anthropic-messages'),
+    _field(model, '模型名称', '留空，填写后才会调用模型'),
+    _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写'),
+    _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
+    _field(secret, 'QQ AppSecret', '已保存时留空表示不修改', obscure: true),
+    _field(apiKey, 'AI API Key', '已保存时留空表示不修改', obscure: true),
+    const SizedBox(height: 8),
+    FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),
+  ]);
+
+  Widget _field(TextEditingController c, String label, String hint, {bool obscure = false}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
+}
+
 class _PlaceholderPage extends StatelessWidget {
   const _PlaceholderPage({required this.title, required this.message});
   final String title;
@@ -125,4 +170,5 @@ class _PlaceholderPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('$title\n\n$message', textAlign: TextAlign.center)));
 }
+
 
