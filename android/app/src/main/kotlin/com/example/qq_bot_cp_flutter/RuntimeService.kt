@@ -7,6 +7,8 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.net.ConnectivityManager
 import android.net.Network
 import java.util.UUID
@@ -19,6 +21,8 @@ class RuntimeService : Service() {
     }
     private var controller: RuntimeProcessController? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private val reconnectHandler = Handler(Looper.getMainLooper())
+    private var reconnectAttempt = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -46,16 +50,8 @@ class RuntimeService : Service() {
                 if (configured) {
                     update("starting", "runtime.spawn", "正在启动 Node/DSH 子进程", System.currentTimeMillis() - started)
                     controller = RuntimeProcessController(this)
-                    val credentials = CredentialStore(this)
-                    val config = getSharedPreferences("public-config", MODE_PRIVATE)
-                    controller?.start(mapOf(
-                        "QQBOT_APPID" to credentials.read("qqbotAppId"),
-                        "QQBOT_SECRET" to credentials.read("qqbotSecret"),
-                        "LLM_API_KEY" to credentials.read("llmApiKey"),
-                        "LLM_PROVIDER" to config.getString("protocol", "").orEmpty(),
-                        "LLM_MODEL" to config.getString("model", "").orEmpty(),
-                        "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
-                    ))
+                    controller?.start(runtimeEnvironment())
+                    reconnectAttempt = 0
                     update("online", "ready", "Node/DSH 进程已启动，等待网关和模型就绪", System.currentTimeMillis() - started)
                 } else {
                     update("online", "ready", "服务已就绪，等待在 Flutter 中填写凭据", System.currentTimeMillis() - started)
@@ -70,6 +66,7 @@ class RuntimeService : Service() {
     }
 
     override fun onDestroy() {
+        reconnectHandler.removeCallbacksAndMessages(null)
         networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
         networkCallback = null
         controller?.stop()
@@ -91,6 +88,43 @@ class RuntimeService : Service() {
         .setContentTitle("QQ-bot-CP").setContentText(text)
         .setSmallIcon(android.R.drawable.stat_notify_sync).setOngoing(true).build()
 
+    private fun runtimeEnvironment(): Map<String, String> {
+        val credentials = CredentialStore(this)
+        val config = getSharedPreferences("public-config", MODE_PRIVATE)
+        return mapOf(
+            "QQBOT_APPID" to credentials.read("qqbotAppId"),
+            "QQBOT_SECRET" to credentials.read("qqbotSecret"),
+            "LLM_API_KEY" to credentials.read("llmApiKey"),
+            "LLM_PROVIDER" to config.getString("protocol", "").orEmpty(),
+            "LLM_MODEL" to config.getString("model", "").orEmpty(),
+            "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
+        )
+    }
+
+    private fun scheduleReconnect() {
+        if (!getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("credentialsConfigured", false)) return
+        if (controller?.isAlive() == true) {
+            reconnectAttempt = 0
+            return
+        }
+        val delay = minOf(60_000L, 1_000L shl minOf(reconnectAttempt, 6))
+        reconnectAttempt++
+        update("reconnecting", "network.retry", "第 $reconnectAttempt 次重连，${delay / 1000} 秒后检查", delay)
+        reconnectHandler.postDelayed({
+            try {
+                if (controller?.isAlive() != true) {
+                    controller = RuntimeProcessController(this)
+                    controller?.start(runtimeEnvironment())
+                    update("online", "network.recovered", "Runtime 进程已恢复")
+                    reconnectAttempt = 0
+                }
+            } catch (error: Exception) {
+                RuntimeEventBus.emit("error", "network", "重连失败：${error.message ?: error}", errorCode = "runtime_reconnect_failed")
+                if (reconnectAttempt < 7) scheduleReconnect() else update("failed", "network.cooldown", "连续重连失败，进入冷却", errorCode = "runtime_reconnect_cooldown")
+            }
+        }, delay)
+    }
+
     private fun registerNetworkCallback() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             RuntimeEventBus.emit("warn", "network", "当前 Android 版本不支持默认网络回调", errorCode = "network_callback_unsupported")
@@ -102,7 +136,7 @@ class RuntimeService : Service() {
                 RuntimeEventBus.emit("info", "network", "网络已恢复，准备检查 Runtime 连接", errorCode = "network_available")
                 val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
                 if (prefs.getString("status", "") == "reconnecting") {
-                    prefs.edit().putString("status", "online").putString("phase", "network.recovered").putString("message", "网络已恢复").apply()
+                    scheduleReconnect()
                 }
             }
             override fun onLost(network: Network) {
