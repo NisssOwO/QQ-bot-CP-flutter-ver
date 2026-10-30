@@ -8,6 +8,7 @@ class RuntimeLogEntry {
     required this.module,
     required this.message,
     this.elapsedMs,
+    this.runId,
   });
 
   final DateTime time;
@@ -15,6 +16,7 @@ class RuntimeLogEntry {
   final String module;
   final String message;
   final int? elapsedMs;
+  final String? runId;
 }
 
 enum LogLevel { info, warn, error }

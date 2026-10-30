@@ -131,26 +131,26 @@
 
 ### P4.1 重启阶段
 
-- [ ] `restart.begin`：记录重启开始时间和触发来源。
-- [ ] `process.stop`：停止旧 Runtime，记录耗时和结果。
-- [ ] `config.load`：读取公开配置和 Keystore 凭据。
-- [ ] `runtime.prepare`：检查 Node、profile、权限和运行目录。
-- [ ] `runtime.spawn`：启动 Node 子进程。
+- [x] `restart.begin`：记录重启开始时间和 runId。
+- [x] `process.stop`：停止旧 Runtime，记录耗时和结果。
+- [x] `config.load`：读取公开配置和 Keystore 凭据。
+- [x] `runtime.prepare`：检查 Node、profile、权限和运行目录。
+- [x] `runtime.spawn`：启动 Node 子进程。
 - [ ] `plugin.load`：记录插件加载成功、跳过和失败原因。
 - [ ] `network.check`：检查 DNS、HTTPS 和 QQ 网关可达性。
 - [ ] `qq.connect`：连接官方 QQ Bot WebSocket。
 - [ ] `session.restore`：恢复会话索引，不恢复敏感数据到日志。
-- [ ] `ready`：标记 Runtime 可用。
-- [ ] `restart.complete`：记录总耗时。
+- [x] `ready`：标记 Runtime 可用。
+- [x] `restart.complete`：记录总耗时。
 
 ### P4.2 日志模型
 
-- [ ] 字段包含时间、级别、模块、阶段、消息、耗时、错误码、runId。
-- [ ] 支持 `info`、`warn`、`error` 三种级别筛选。
-- [ ] 支持模块筛选：Runtime、QQ、AI、网络、更新、存储。
-- [ ] 支持实时日志流和最近一次重启摘要。
-- [ ] 保留最近 N MB 或最近 N 条日志，防止无限增长。
-- [ ] 旧错误在新一轮启动前清除或标记为历史错误。
+- [x] 字段包含时间、级别、模块、阶段、消息、耗时、runId（错误码字段待补）。
+- [x] 支持 `info`、`warn`、`error` 三种级别筛选。
+- [x] 支持模块筛选：Runtime、QQ、AI、网络、更新、存储（按实际事件模块过滤）。
+- [x] 支持实时日志流和最近一次重启摘要。
+- [x] 保留最近 N MB 或最近 N 条日志，防止无限增长。
+- [x] 旧错误在新一轮启动前清除或标记为历史错误。
 - [ ] 日志导出自动脱敏。
 
 **P4 验收：** 用户能从日志看出“现在在做什么、已耗时多久、下一步是什么、失败在哪里”。
