@@ -6,6 +6,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
 import android.os.IBinder
+import android.os.Build
+import android.net.ConnectivityManager
+import android.net.Network
 import java.util.UUID
 
 class RuntimeService : Service() {
@@ -15,6 +18,7 @@ class RuntimeService : Service() {
         private const val NOTIFICATION_ID = 1001
     }
     private var controller: RuntimeProcessController? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -22,6 +26,7 @@ class RuntimeService : Service() {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "QQ-bot-CP Runtime", NotificationManager.IMPORTANCE_LOW))
         startForeground(NOTIFICATION_ID, notification("正在启动 Runtime"))
         update("starting", "准备启动", "正在初始化 Android Runtime")
+        registerNetworkCallback()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -65,6 +70,8 @@ class RuntimeService : Service() {
     }
 
     override fun onDestroy() {
+        networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
+        networkCallback = null
         controller?.stop()
         update("stopped", "已停止", "Runtime Service 已停止")
         super.onDestroy()
@@ -83,6 +90,30 @@ class RuntimeService : Service() {
     private fun notification(text: String): Notification = Notification.Builder(this, CHANNEL)
         .setContentTitle("QQ-bot-CP").setContentText(text)
         .setSmallIcon(android.R.drawable.stat_notify_sync).setOngoing(true).build()
+
+    private fun registerNetworkCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            RuntimeEventBus.emit("warn", "network", "当前 Android 版本不支持默认网络回调", errorCode = "network_callback_unsupported")
+            return
+        }
+        val manager = getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                RuntimeEventBus.emit("info", "network", "网络已恢复，准备检查 Runtime 连接", errorCode = "network_available")
+                val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+                if (prefs.getString("status", "") == "reconnecting") {
+                    prefs.edit().putString("status", "online").putString("phase", "network.recovered").putString("message", "网络已恢复").apply()
+                }
+            }
+            override fun onLost(network: Network) {
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("status", "reconnecting").putString("phase", "network.lost").putString("message", "网络断开，等待恢复").apply()
+                RuntimeEventBus.emit("warn", "network", "网络已断开，Runtime 将等待恢复", errorCode = "network_lost")
+                getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("网络断开，等待恢复"))
+            }
+        }
+        manager.registerDefaultNetworkCallback(callback)
+        networkCallback = callback
+    }
 
 }
 
