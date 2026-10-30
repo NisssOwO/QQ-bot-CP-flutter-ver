@@ -24,6 +24,7 @@ class RuntimeService : Service() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private var reconnectAttempt = 0
+    private var reconnectScheduled = false
 
     override fun onCreate() {
         super.onCreate()
@@ -36,6 +37,8 @@ class RuntimeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        reconnectHandler.removeCallbacksAndMessages(null)
+        reconnectScheduled = false
         Thread({
             val started = System.currentTimeMillis()
             val runId = UUID.randomUUID().toString().take(8)
@@ -75,6 +78,7 @@ class RuntimeService : Service() {
 
     override fun onDestroy() {
         reconnectHandler.removeCallbacksAndMessages(null)
+        reconnectScheduled = false
         networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
         networkCallback = null
         controller?.stop()
@@ -132,11 +136,14 @@ class RuntimeService : Service() {
             reconnectAttempt = 0
             return
         }
+        if (reconnectScheduled) return
+        reconnectScheduled = true
         val delay = if (immediate) 0L else minOf(60_000L, 1_000L shl minOf(reconnectAttempt, 6))
         reconnectAttempt++
         update("reconnecting", "network.retry", "第 $reconnectAttempt 次重连，${delay / 1000} 秒后检查", delay)
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("reconnectAttempts", reconnectAttempt).putLong("nextRetryMs", delay).apply()
         reconnectHandler.postDelayed({
+            reconnectScheduled = false
             try {
                 if (controller?.isAlive() != true) {
                     controller = RuntimeProcessController(this)
