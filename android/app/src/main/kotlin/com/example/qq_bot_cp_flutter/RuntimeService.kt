@@ -81,6 +81,7 @@ class RuntimeService : Service() {
             .putString("status", status).putString("phase", phase)
             .putString("message", message).putLong("elapsedMs", elapsedMs).apply()
         RuntimeEventBus.emit(if (status == "failed") "error" else "info", "runtime", "$phase：$message", elapsedMs.takeIf { it > 0 }, errorCode)
+        RuntimeWidgetProvider.updateAll(this)
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("$phase：$message"))
     }
 
