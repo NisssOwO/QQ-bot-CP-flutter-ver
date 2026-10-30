@@ -8,4 +8,5 @@
     android:background="#202124">
     <TextView android:id="@+id/widget_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" android:text="QQ-bot-CP" />
     <TextView android:id="@+id/widget_phase" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#C8C8C8" android:textSize="12sp" android:maxLines="3" />
+    <TextView android:id="@+id/widget_details" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:textColor="#AFC8FF" android:textSize="12sp" android:maxLines="2" />
 </LinearLayout>
