@@ -440,9 +440,37 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun restoreBackup(json: JSONObject) {
-        require(json.optInt("schemaVersion", 0) == 1) { "不支持的备份版本" }
-        val config = json.optJSONObject("publicConfig") ?: JSONObject()
-        getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).apply()
+        val schema = json.optInt("schemaVersion", 0)
+        if (schema == 1) {
+            val config = json.optJSONObject("publicConfig") ?: JSONObject()
+            getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).apply()
+        } else if (json.optInt("version", 0) == 1) {
+            // Legacy WebView export: migrate public AI fields and role cards only.
+            // AppID, AppSecret and API keys are intentionally ignored.
+            val legacy = json.optJSONObject("config") ?: JSONObject()
+            val provider = legacy.optString("provider", "")
+            val protocol = when (provider) {
+                "relay", "openai-compatible", "" -> "openai-compatible"
+                else -> provider
+            }
+            getSharedPreferences("public-config", MODE_PRIVATE).edit()
+                .putString("protocol", protocol)
+                .putString("model", legacy.optString("model", ""))
+                .putString("baseUrl", legacy.optString("baseUrl", "")).apply()
+            val legacyRoles = json.optJSONArray("roles") ?: org.json.JSONArray()
+            val migrated = org.json.JSONArray()
+            for (index in 0 until legacyRoles.length()) {
+                val role = legacyRoles.optJSONObject(index) ?: continue
+                val id = role.optString("id", "")
+                val prompt = role.optString("prompt", "")
+                if (id.startsWith("custom.") && prompt.isNotBlank()) migrated.put(JSONObject().put("id", id).put("displayName", role.optString("displayName", id)).put("prompt", prompt))
+            }
+            getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", migrated.toString()).apply()
+            getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
+            return
+        } else {
+            throw IllegalArgumentException("不支持的备份版本")
+        }
         val theme = json.optJSONObject("theme") ?: JSONObject()
         getSharedPreferences("theme", MODE_PRIVATE).edit().putString("mode", theme.optString("mode", "dark")).putInt("seedColor", theme.optInt("seedColor", 0xff8290ff.toInt())).putFloat("cardRadius", theme.optDouble("cardRadius", 16.0).toFloat()).putFloat("cardOpacity", theme.optDouble("cardOpacity", 1.0).toFloat()).putBoolean("tintedBackground", theme.optBoolean("tintedBackground", false)).apply()
         val role = json.optJSONObject("defaultRole") ?: JSONObject()

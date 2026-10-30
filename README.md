@@ -64,3 +64,5 @@ AI 协议在应用中选择，DSH 使用固定的 `relay` 路由，并通过 `LL
 已完成：空配置首页、Flutter 测试、静态分析、Android Debug 构建、角色卡管理、主题和公网 IP 页面、前台 Runtime 服务、通知操作、更新校验骨架、Runtime 协议路由配置。
 
 尚未完成：Android 9/14 真机矩阵、真实 QQ WebSocket 私聊/群聊验收、真实联网 AI 三协议请求、正式签名 Release、在线更新服务器和长时间锁屏稳定性测试。详见 [TODO-flutter-refactor.md](TODO-flutter-refactor.md)。
+
+旧版 WebView 的脱敏备份可以从设置页导入；新应用只接收公开 AI 配置和 `custom.*` 角色卡，不会迁移旧 AppID、AppSecret 或 API Key。
