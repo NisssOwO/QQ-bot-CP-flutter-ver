@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qq_bot_cp_flutter/main.dart';
+import 'package:qq_bot_cp/main.dart';
 
 void main() {
   testWidgets('starts with empty-config overview', (tester) async {

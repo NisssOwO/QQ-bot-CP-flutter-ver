@@ -1,4 +1,4 @@
-package com.example.qq_bot_cp_flutter
+package com.shinycolors.officialbot
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
