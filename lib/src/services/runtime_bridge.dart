@@ -75,5 +75,7 @@ class RuntimeBridge {
   Future<Map<String, Object?>> testQqConnection() async => await _methods.invokeMapMethod<String, Object?>('testQqConnection') ?? {};
   Future<Map<String, String>> appInfo() async => (await _methods.invokeMapMethod<String, Object?>('getAppInfo') ?? {}).map((key, value) => MapEntry(key, '$value'));
   Future<Map<String, Object?>> pickAndInstallApk() async => await _methods.invokeMapMethod<String, Object?>('pickAndInstallApk') ?? {};
+  Future<String> updateCachePath() async => await _methods.invokeMethod<String>('getUpdateCachePath') ?? '';
+  Future<Map<String, Object?>> verifyAndInstallUpdate({required String path, required String sha256}) async => await _methods.invokeMapMethod<String, Object?>('verifyAndInstallUpdate', {'path': path, 'sha256': sha256}) ?? {};
 }
 

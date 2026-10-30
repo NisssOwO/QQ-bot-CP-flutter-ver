@@ -15,6 +15,7 @@ import java.io.FileOutputStream
 import java.security.MessageDigest
 import android.provider.Settings
 import android.net.Uri
+import androidx.core.content.FileProvider
 
 class MainActivity : FlutterActivity() {
     private val methodChannel = "qq_bot_cp/runtime"
@@ -36,6 +37,8 @@ class MainActivity : FlutterActivity() {
                 "testQqConnection" -> testQqConnection(result)
                 "getAppInfo" -> result.success(appInfo())
                 "pickAndInstallApk" -> pickAndInstallApk(result)
+                "getUpdateCachePath" -> result.success(File(cacheDir, "online-update.apk").absolutePath)
+                "verifyAndInstallUpdate" -> verifyAndInstallUpdate(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 else -> result.notImplemented()
             }
         }
@@ -206,5 +209,20 @@ class MainActivity : FlutterActivity() {
         file.inputStream().use { input -> val buffer = ByteArray(8192); var count = input.read(buffer); while (count > 0) { digest.update(buffer, 0, count); count = input.read(buffer) } }
         val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
         return mapOf("ok" to "true", "sha256" to sha256, "versionCode" to archiveVersion.toString())
+    }
+
+    private fun verifyAndInstallUpdate(values: Map<*, *>, result: MethodChannel.Result) {
+        val file = File(values["path"] as? String ?: "")
+        val expected = (values["sha256"] as? String ?: "").trim().lowercase()
+        if (!file.isFile) { result.success(mapOf("status" to "rejected", "reason" to "下载文件不存在")); return }
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input -> val buffer = ByteArray(8192); var count = input.read(buffer); while (count > 0) { digest.update(buffer, 0, count); count = input.read(buffer) } }
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        if (expected.isNotEmpty() && actual != expected) { result.success(mapOf("status" to "rejected", "reason" to "SHA-256 校验失败", "sha256" to actual)); return }
+        val validation = validateApk(file)
+        if (validation["ok"] != "true") { result.success(mapOf("status" to "rejected", "reason" to (validation["reason"] ?: "APK 校验失败"), "sha256" to actual)); return }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) })
+        result.success(mapOf("status" to "installer_opened", "sha256" to actual))
     }
 }
