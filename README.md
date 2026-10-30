@@ -39,6 +39,14 @@ powershell -ExecutionPolicy Bypass -File .\tool\prepare-runtime-bundle.ps1 -Sour
 
 构建前必须确认 Runtime 目录不含 `credentials`、`sessions`、`storage`、用户角色卡或真实配置。
 
+检查本机工具链：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\check-toolchain.ps1
+```
+
+版本基线记录在 `tool/toolchain.json`。
+
 ## 凭据和数据
 
 AppID、AppSecret、API Key 由用户在应用内填写，真实凭据只写入 Android Keystore。默认安装包不预置用户凭据、会话记录或自定义角色卡；导出备份会脱敏，不包含密钥和会话内容。内置 Runtime 代码及插件属于运行依赖，不等于用户配置。

@@ -1,0 +1,11 @@
+{
+  "flutter": "3.47.9",
+  "dart": "3.13.7",
+  "javaMajor": 25,
+  "gradle": "9.3.1",
+  "androidGradlePlugin": "9.1.0",
+  "kotlin": "2.4.0",
+  "compileSdk": 36,
+  "targetSdk": 36,
+  "minSdk": 24
+}
