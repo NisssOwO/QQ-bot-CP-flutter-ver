@@ -54,6 +54,8 @@ class MainActivity : FlutterActivity() {
                 "getAppInfo" -> result.success(appInfo())
                 "pickAndInstallApk" -> pickAndInstallApk(result)
                 "getUpdateCachePath" -> result.success(File(cacheDir, "online-update.apk").absolutePath)
+                "getUpdateEndpoint" -> result.success(getSharedPreferences("public-config", MODE_PRIVATE).getString("updateUrl", "").orEmpty())
+                "saveUpdateEndpoint" -> { getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("updateUrl", (call.arguments as? String ?: "").trim()).apply(); result.success(null) }
                 "verifyAndInstallUpdate" -> verifyAndInstallUpdate(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getThemeSettings" -> result.success(themeSettings())
                 "saveThemeSettings" -> { saveThemeSettings(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
@@ -451,14 +453,14 @@ class MainActivity : FlutterActivity() {
         val theme = getSharedPreferences("theme", MODE_PRIVATE)
         val role = getSharedPreferences("default-role", MODE_PRIVATE)
         val cards = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
-        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("id", role.getString("id", "")).put("name", role.getString("name", "")).put("prompt", role.getString("prompt", ""))).put("roleCards", cards)
+        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", "")).put("updateUrl", config.getString("updateUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("id", role.getString("id", "")).put("name", role.getString("name", "")).put("prompt", role.getString("prompt", ""))).put("roleCards", cards)
     }
 
     private fun restoreBackup(json: JSONObject) {
         val schema = json.optInt("schemaVersion", 0)
         if (schema == 1) {
             val config = json.optJSONObject("publicConfig") ?: JSONObject()
-            getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).apply()
+            getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).putString("updateUrl", config.optString("updateUrl")).apply()
         } else if (json.optInt("version", 0) == 1) {
             // Legacy WebView export: migrate public AI fields and role cards only.
             // AppID, AppSecret and API keys are intentionally ignored.
