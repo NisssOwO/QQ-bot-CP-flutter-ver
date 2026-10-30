@@ -59,16 +59,30 @@ class RuntimeProcessController(private val context: Context) {
                 else -> null
             }
             when (module) {
-                "qq" -> prefs.edit().putString("qqStatus", when {
-                    lower.contains("error") || lower.contains("failed") || lower.contains("disconnect") -> "异常"
-                    lower.contains("ready") || lower.contains("connected") || lower.contains("online") -> "在线"
-                    else -> "连接中"
-                }).apply()
-                "ai" -> prefs.edit().putString("aiStatus", when {
-                    lower.contains("error") || lower.contains("failed") || lower.contains("missing_credential") -> "异常"
-                    lower.contains("ready") || lower.contains("connected") -> "在线"
-                    else -> "请求中"
-                }).apply()
+                "qq" -> {
+                    val failure = lower.contains("error") || lower.contains("failed") || lower.contains("disconnect")
+                    val connected = lower.contains("ready") || lower.contains("connected") || lower.contains("online")
+                    val editor = prefs.edit().putString("qqStatus", when {
+                        failure -> "异常"
+                        connected -> "在线"
+                        else -> "连接中"
+                    })
+                    if (failure) editor.putInt("qqFailureCount", prefs.getInt("qqFailureCount", 0) + 1)
+                    if (connected) editor.putInt("qqFailureCount", 0)
+                    editor.apply()
+                }
+                "ai" -> {
+                    val failure = lower.contains("error") || lower.contains("failed") || lower.contains("missing_credential")
+                    val connected = lower.contains("ready") || lower.contains("connected")
+                    val editor = prefs.edit().putString("aiStatus", when {
+                        failure -> "异常"
+                        connected -> "在线"
+                        else -> "请求中"
+                    })
+                    if (failure) editor.putInt("aiFailureCount", prefs.getInt("aiFailureCount", 0) + 1)
+                    if (connected) editor.putInt("aiFailureCount", 0)
+                    editor.apply()
+                }
                 "network" -> prefs.edit().putString("networkStatus", if (lower.contains("error") || lower.contains("failed")) "异常" else "连接中").apply()
             }
             RuntimeEventBus.emit(level, module, line, errorCode = errorCode)

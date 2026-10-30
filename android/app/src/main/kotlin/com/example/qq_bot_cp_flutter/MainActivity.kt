@@ -84,6 +84,8 @@ class MainActivity : FlutterActivity() {
             "networkStatus" to prefs.getString("networkStatus", "未知"),
             "reconnectAttempts" to prefs.getInt("reconnectAttempts", 0),
             "nextRetryMs" to prefs.getLong("nextRetryMs", 0L),
+            "qqFailureCount" to prefs.getInt("qqFailureCount", 0),
+            "aiFailureCount" to prefs.getInt("aiFailureCount", 0),
         )
     }
 
