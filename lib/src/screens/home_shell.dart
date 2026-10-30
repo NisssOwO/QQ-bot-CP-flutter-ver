@@ -172,6 +172,12 @@ class _OverviewPage extends StatelessWidget {
         ]))),
         Card(child: ListTile(title: const Text('QQ 官方机器人'), subtitle: Text(qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret'), leading: Icon(qqConfigured ? Icons.check_circle : Icons.info_outline, color: qqConfigured ? Colors.greenAccent : Colors.orangeAccent))),
         Card(child: ListTile(title: const Text('AI 接口'), subtitle: Text(llmConfigured ? 'API Key 已配置' : '等待填写 API Key'), leading: Icon(llmConfigured ? Icons.check_circle : Icons.info_outline, color: llmConfigured ? Colors.greenAccent : Colors.orangeAccent))),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('聊天指令', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          const Text('点击右侧按钮可逐条复制到 QQ。'),
+          for (final command in const ['/preset <角色ID>', '/presets', '/new']) _CommandCopyRow(command: command),
+        ]))),
       ]);
 
   static String _statusLabel(RuntimeStatus status) => switch (status) {
@@ -195,6 +201,13 @@ class _IpLine extends StatelessWidget {
     final shown = hidden && value != '未检测' && value != '无法获取' ? '••••••••' : value;
     return Row(children: [SizedBox(width: 48, child: Text('$label：')), Expanded(child: Text(shown)), if (!hidden && value != '未检测' && value != '无法获取') IconButton(tooltip: '复制 $label', onPressed: () => onCopy(value), icon: const Icon(Icons.copy, size: 18))]);
   }
+}
+
+class _CommandCopyRow extends StatelessWidget {
+  const _CommandCopyRow({required this.command});
+  final String command;
+  @override
+  Widget build(BuildContext context) => Row(children: [Expanded(child: Text(command, style: const TextStyle(fontFamily: 'monospace'))), IconButton(tooltip: '复制 $command', onPressed: () async { await Clipboard.setData(ClipboardData(text: command)); if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已复制 $command'))); }, icon: const Icon(Icons.copy, size: 18))]);
 }
 
 class _LogPage extends StatefulWidget {
@@ -248,13 +261,15 @@ class _ConfigPageState extends State<_ConfigPage> {
   bool testingEndpoint = false;
   Map<String, Object?>? qqTest;
   bool testingQq = false;
+  bool qqConfigured = false;
+  bool llmConfigured = false;
 
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { for (final c in [protocol, model, baseUrl, appId, secret, apiKey]) { c.dispose(); } super.dispose(); }
   Future<void> _load() async {
-    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; history = await widget.bridge.configHistory(); }
+    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured; history = await widget.bridge.configHistory(); }
     finally { if (mounted) setState(() => loading = false); }
   }
   Future<void> _save() async {
@@ -300,10 +315,10 @@ class _ConfigPageState extends State<_ConfigPage> {
     if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? Colors.greenAccent : Colors.orangeAccent))),
     const SizedBox(height: 12),
     _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
-    _field(secret, 'QQ AppSecret', '已保存时留空表示不修改', obscure: true),
+    _field(secret, 'QQ AppSecret', qqConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
     FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
     if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? Colors.greenAccent : Colors.orangeAccent))),
-    _field(apiKey, 'AI API Key', '已保存时留空表示不修改', obscure: true),
+    _field(apiKey, 'AI API Key', llmConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),
     if (history.isNotEmpty) TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置')),
