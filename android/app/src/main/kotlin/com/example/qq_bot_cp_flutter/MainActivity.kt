@@ -48,6 +48,8 @@ class MainActivity : FlutterActivity() {
                 "saveThemeSettings" -> { saveThemeSettings(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "exportBackup" -> exportBackup(result)
                 "importBackup" -> importBackup(result)
+                "getDefaultRole" -> result.success(defaultRole())
+                "saveDefaultRole" -> { saveDefaultRole(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 else -> result.notImplemented()
             }
         }
@@ -170,6 +172,15 @@ class MainActivity : FlutterActivity() {
             .apply()
     }
 
+    private fun defaultRole(): Map<String, String> {
+        val prefs = getSharedPreferences("default-role", MODE_PRIVATE)
+        return mapOf("name" to prefs.getString("name", "") .orEmpty(), "prompt" to prefs.getString("prompt", "").orEmpty())
+    }
+
+    private fun saveDefaultRole(values: Map<*, *>) {
+        getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("name", values["name"] as? String ?: "").putString("prompt", values["prompt"] as? String ?: "").apply()
+    }
+
     private fun appInfo(): Map<String, String> {
         val info = packageManager.getPackageInfo(packageName, 0)
         return mapOf("versionName" to (info.versionName ?: "未知"), "versionCode" to info.longVersionCode.toString(), "abi" to (Build.SUPPORTED_ABIS.firstOrNull() ?: "未知"))
@@ -253,7 +264,8 @@ class MainActivity : FlutterActivity() {
     private fun backupJson(): JSONObject {
         val config = getSharedPreferences("public-config", MODE_PRIVATE)
         val theme = getSharedPreferences("theme", MODE_PRIVATE)
-        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false)))
+        val role = getSharedPreferences("default-role", MODE_PRIVATE)
+        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("name", role.getString("name", "")).put("prompt", role.getString("prompt", "")))
     }
 
     private fun restoreBackup(json: JSONObject) {
@@ -262,6 +274,8 @@ class MainActivity : FlutterActivity() {
         getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).apply()
         val theme = json.optJSONObject("theme") ?: JSONObject()
         getSharedPreferences("theme", MODE_PRIVATE).edit().putString("mode", theme.optString("mode", "dark")).putInt("seedColor", theme.optInt("seedColor", 0xff8290ff.toInt())).putFloat("cardRadius", theme.optDouble("cardRadius", 16.0).toFloat()).putFloat("cardOpacity", theme.optDouble("cardOpacity", 1.0).toFloat()).putBoolean("tintedBackground", theme.optBoolean("tintedBackground", false)).apply()
+        val role = json.optJSONObject("defaultRole") ?: JSONObject()
+        getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("name", role.optString("name", "")).putString("prompt", role.optString("prompt", "")).apply()
     }
 
     private fun validateApk(file: File): Map<String, String> {
