@@ -58,6 +58,8 @@ class MainActivity : FlutterActivity() {
                 "exportRoleCard" -> exportRoleCard(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "importRoleCard" -> importRoleCard(result)
                 "clearData" -> { clearData(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "openBatteryOptimizationSettings" -> { openBatteryOptimizationSettings(); result.success(null) }
+                "openNotificationSettings" -> { openNotificationSettings(); result.success(null) }
                 else -> result.notImplemented()
             }
         }
@@ -81,6 +83,24 @@ class MainActivity : FlutterActivity() {
     private fun startRuntimeService() {
         val intent = Intent(this, RuntimeService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+        } else {
+            Intent(Settings.ACTION_SETTINGS)
+        }
+        startActivity(intent)
+    }
+
+    private fun openNotificationSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        }
+        startActivity(intent)
     }
 
     private fun publicConfig(): Map<String, Any?> {
