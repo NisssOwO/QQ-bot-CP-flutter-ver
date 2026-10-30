@@ -26,6 +26,7 @@ Set-Location .\android
 .\gradlew.bat assembleDebug --no-daemon
 # 正式签名 Release（需要本机 android/keystore.properties）
 .\gradlew.bat assembleRelease --no-daemon
+powershell -ExecutionPolicy Bypass -File .\tool\audit-release.ps1
 ```
 
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
