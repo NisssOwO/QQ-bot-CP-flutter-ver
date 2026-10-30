@@ -33,7 +33,16 @@ class RuntimeService : Service() {
             if (configured) {
                 update("starting", "启动 Node/DSH", "正在启动后台进程")
                 controller = RuntimeProcessController(this)
-                controller?.start(emptyMap())
+                val credentials = CredentialStore(this)
+                val config = getSharedPreferences("public-config", MODE_PRIVATE)
+                controller?.start(mapOf(
+                    "QQBOT_APPID" to credentials.read("qqbotAppId"),
+                    "QQBOT_SECRET" to credentials.read("qqbotSecret"),
+                    "LLM_API_KEY" to credentials.read("llmApiKey"),
+                    "LLM_PROVIDER" to config.getString("protocol", "") .orEmpty(),
+                    "LLM_MODEL" to config.getString("model", "") .orEmpty(),
+                    "LLM_BASE_URL" to config.getString("baseUrl", "") .orEmpty(),
+                ))
                 update("online", "Runtime 已启动", "Node/DSH 进程运行中", System.currentTimeMillis() - started)
             } else {
                 update("online", "服务已就绪", "等待在 Flutter 中填写凭据", System.currentTimeMillis() - started)
@@ -62,3 +71,4 @@ class RuntimeService : Service() {
         .setSmallIcon(android.R.drawable.stat_notify_sync).setOngoing(true).build()
 
 }
+

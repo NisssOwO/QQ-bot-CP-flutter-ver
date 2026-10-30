@@ -52,5 +52,11 @@ class RuntimeBridge {
       llmConfigured: raw['llmConfigured'] == true,
     );
   }
+
+  Future<void> saveConfig({required String protocol, required String model, required String baseUrl, required String appId, required String secret, required String apiKey}) =>
+      _methods.invokeMethod<void>('saveConfig', {
+        'protocol': protocol, 'model': model, 'baseUrl': baseUrl,
+        'appId': appId, 'secret': secret, 'apiKey': apiKey,
+      });
 }
 
