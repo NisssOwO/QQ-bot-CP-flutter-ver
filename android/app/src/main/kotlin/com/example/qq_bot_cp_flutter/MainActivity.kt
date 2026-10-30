@@ -196,7 +196,10 @@ class MainActivity : FlutterActivity() {
             try {
                 val metadata = org.json.JSONObject(file.readText())
                 val id = metadata.optString("id", file.name.removePrefix("preset.").removeSuffix(".json"))
-                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to "", "builtin" to true)
+                val promptFile = File(presets, file.name.removeSuffix(".json") + ".md")
+                val promptText = if (promptFile.isFile) promptFile.readText() else ""
+                val body = if (promptText.startsWith("---")) promptText.substringAfter("---\n", "").substringAfter("---\n", "") else promptText
+                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to body.trim(), "builtin" to true)
             } catch (_: Exception) { }
         }
         val array = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
@@ -208,8 +211,14 @@ class MainActivity : FlutterActivity() {
         val id = (values["id"] as? String ?: "").trim()
         val name = (values["displayName"] as? String ?: "").trim()
         val prompt = values["prompt"] as? String ?: ""
-        require(Regex("custom\\.[a-z0-9][a-z0-9._-]{0,48}").matches(id)) { "角色 ID 必须是 custom.xxx" }
+        val existingPreset = findPresetFiles(id)
+        require(Regex("custom\\.[a-z0-9][a-z0-9._-]{0,48}").matches(id) || existingPreset != null) { "角色 ID 必须是 custom.xxx 或已有内置角色 ID" }
         require(name.isNotEmpty() && prompt.trim().isNotEmpty()) { "角色名称和提示词不能为空" }
+        if (existingPreset != null) {
+            existingPreset.first.writeText(prompt)
+            existingPreset.second.writeText(org.json.JSONObject().put("id", id).put("displayName", name).toString())
+            return
+        }
         val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         val next = org.json.JSONArray(); var replaced = false
         for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") == id) { next.put(org.json.JSONObject().put("id", id).put("displayName", name).put("prompt", prompt)); replaced = true } else next.put(item) }
@@ -219,11 +228,20 @@ class MainActivity : FlutterActivity() {
 
     private fun deleteRoleCard(values: Map<*, *>) {
         val id = values["id"] as? String ?: return
+        val preset = findPresetFiles(id)
+        if (preset != null) { preset.first.delete(); preset.second.delete(); return }
         val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         val next = org.json.JSONArray()
         for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") != id) next.put(item) }
         getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", next.toString()).apply()
         if (getSharedPreferences("default-role", MODE_PRIVATE).getString("id", "") == id) getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
+    }
+
+    private fun findPresetFiles(id: String): Pair<File, File>? {
+        val directory = File(filesDir, "runtime/presets")
+        val metadataFiles = directory.listFiles()?.filter { it.name.startsWith("preset.") && it.name.endsWith(".json") } ?: return null
+        metadataFiles.forEach { metadataFile -> try { if (org.json.JSONObject(metadataFile.readText()).optString("id") == id) return Pair(File(directory, metadataFile.name.removeSuffix(".json") + ".md"), metadataFile) } catch (_: Exception) { } }
+        return null
     }
 
     private fun clearData(values: Map<*, *>) {
