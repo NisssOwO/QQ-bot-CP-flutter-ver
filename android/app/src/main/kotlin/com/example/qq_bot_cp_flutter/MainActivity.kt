@@ -191,6 +191,7 @@ class MainActivity : FlutterActivity() {
 
     private fun roleCards(): List<Map<String, Any>> {
         val result = mutableListOf<Map<String, Any>>()
+        val seenIds = mutableSetOf<String>()
         val presets = File(filesDir, "runtime/presets")
         presets.listFiles()?.filter { it.name.startsWith("preset.") && it.name.endsWith(".json") }?.forEach { file ->
             try {
@@ -199,11 +200,12 @@ class MainActivity : FlutterActivity() {
                 val promptFile = File(presets, file.name.removeSuffix(".json") + ".md")
                 val promptText = if (promptFile.isFile) promptFile.readText() else ""
                 val body = if (promptText.startsWith("---")) promptText.substringAfter("---\n", "").substringAfter("---\n", "") else promptText
-                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to body.trim(), "builtin" to true)
+                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to body.trim(), "builtin" to metadata.optBoolean("builtin", !id.startsWith("custom.")))
+                seenIds += id
             } catch (_: Exception) { }
         }
         val array = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
-        result += (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; mapOf("id" to item.optString("id"), "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt"), "builtin" to false) }
+        result += (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; val id = item.optString("id"); if (id.isBlank() || seenIds.contains(id)) return@mapNotNull null; mapOf("id" to id, "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt"), "builtin" to false) }
         return result
     }
 
@@ -216,8 +218,11 @@ class MainActivity : FlutterActivity() {
         require(name.isNotEmpty() && prompt.trim().isNotEmpty()) { "角色名称和提示词不能为空" }
         if (existingPreset != null) {
             existingPreset.first.writeText(prompt)
-            existingPreset.second.writeText(org.json.JSONObject().put("id", id).put("displayName", name).toString())
-            return
+            val metadata = try { org.json.JSONObject(existingPreset.second.readText()) } catch (_: Exception) { org.json.JSONObject() }
+            metadata.put("id", id).put("displayName", name)
+            existingPreset.second.writeText(metadata.toString())
+        } else {
+            writeRuntimePreset(id, name, prompt)
         }
         val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         val next = org.json.JSONArray(); var replaced = false
@@ -229,12 +234,18 @@ class MainActivity : FlutterActivity() {
     private fun deleteRoleCard(values: Map<*, *>) {
         val id = values["id"] as? String ?: return
         val preset = findPresetFiles(id)
-        if (preset != null) { preset.first.delete(); preset.second.delete(); return }
+        if (preset != null) { preset.first.delete(); preset.second.delete() }
         val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         val next = org.json.JSONArray()
         for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") != id) next.put(item) }
         getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", next.toString()).apply()
         if (getSharedPreferences("default-role", MODE_PRIVATE).getString("id", "") == id) getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
+    }
+
+    private fun writeRuntimePreset(id: String, name: String, prompt: String) {
+        val directory = File(filesDir, "runtime/presets").apply { mkdirs() }
+        File(directory, "preset.$id.md").writeText(prompt)
+        File(directory, "preset.$id.json").writeText(org.json.JSONObject().put("id", id).put("displayName", name).put("builtin", false).toString())
     }
 
     private fun findPresetFiles(id: String): Pair<File, File>? {
