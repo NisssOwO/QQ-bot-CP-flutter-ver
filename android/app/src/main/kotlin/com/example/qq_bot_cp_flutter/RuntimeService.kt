@@ -12,6 +12,7 @@ import android.os.Looper
 import android.net.ConnectivityManager
 import android.net.Network
 import java.util.UUID
+import android.app.PendingIntent
 
 class RuntimeService : Service() {
     companion object {
@@ -85,9 +86,16 @@ class RuntimeService : Service() {
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("$phase：$message"))
     }
 
-    private fun notification(text: String): Notification = Notification.Builder(this, CHANNEL)
-        .setContentTitle("QQ-bot-CP").setContentText(text)
-        .setSmallIcon(android.R.drawable.stat_notify_sync).setOngoing(true).build()
+    private fun notification(text: String): Notification {
+        val openIntent = PendingIntent.getActivity(this, 1002, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val stopIntent = PendingIntent.getBroadcast(this, 1003, Intent(this, RuntimeActionReceiver::class.java).setAction(RuntimeActionReceiver.ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return Notification.Builder(this, CHANNEL)
+            .setContentTitle("QQ-bot-CP").setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_notify_sync).setOngoing(true)
+            .setContentIntent(openIntent)
+            .addAction(Notification.Action.Builder(null, "停止 Runtime", stopIntent).build())
+            .build()
+    }
 
     private fun runtimeEnvironment(): Map<String, String> {
         val credentials = CredentialStore(this)
