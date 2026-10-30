@@ -19,14 +19,17 @@ class RuntimeProcessController(private val context: Context) {
         env["SHINY_RUNTIME_ROOT"] = root.absolutePath
         env["SHINY_NODE_BIN"] = node.absolutePath
         env["LD_LIBRARY_PATH"] = File(root, "bin").absolutePath
-        process = ProcessBuilder(node.absolutePath, entry.absolutePath)
+        val child = ProcessBuilder(node.absolutePath, entry.absolutePath)
             .directory(root).redirectErrorStream(false).apply { environment().putAll(env) }.start()
+        process = child
         val prefs = context.getSharedPreferences(RuntimeService.PREFS, Context.MODE_PRIVATE)
         prefs.edit().putBoolean("runtimeProcessAlive", true).putString("status", "online").apply()
-        Thread { readStream(process!!.inputStream, "runtimeLastOutput") }.start()
-        Thread { readStream(process!!.errorStream, "runtimeLastError") }.start()
+        Thread { readStream(child.inputStream, "runtimeLastOutput") }.start()
+        Thread { readStream(child.errorStream, "runtimeLastError") }.start()
         Thread {
-            val exit = process?.waitFor() ?: -1
+            val exit = child.waitFor()
+            val current = synchronized(this@RuntimeProcessController) { process === child }
+            if (!current) return@Thread
             prefs.edit().putBoolean("runtimeProcessAlive", false).putString("status", if (exit == 0) "stopped" else "failed").putInt("runtimeExitCode", exit).apply()
             RuntimeEventBus.emit(if (exit == 0) "info" else "error", "runtime", "Node/DSH 进程退出，退出码=$exit", errorCode = if (exit == 0) null else "runtime_exit_nonzero")
         }.start()
