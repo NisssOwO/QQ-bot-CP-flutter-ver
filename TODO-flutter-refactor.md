@@ -261,6 +261,8 @@
 
 ### 功能
 
+离线 Runtime 回归脚本 `tool/test-runtime-suite.ps1` 当前 11 项全部通过；真实 QQ/AI 网络收发仍需账号和网络验收。
+
 - [ ] 私聊文字消息。
 - [ ] 群聊 @ 消息。
 - [ ] `/preset`、`/presets`、`/new`。
