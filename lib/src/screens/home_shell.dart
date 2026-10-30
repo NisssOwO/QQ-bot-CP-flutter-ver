@@ -387,6 +387,8 @@ class _SettingsPageState extends State<_SettingsPage> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载更新失败：$error')));
     } finally { if (mounted && !downloadPaused) setState(() => downloading = false); }
   }
+  Future<void> _exportBackup() async { final result = await widget.bridge.exportBackup(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '脱敏备份已导出' : '备份操作：${result['status']}'))); }
+  Future<void> _importBackup() async { final result = await widget.bridge.importBackup(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'imported' ? '备份已恢复，重启应用后完全生效' : result['status'] == 'rejected' ? '备份被拒绝：${result['reason']}' : '备份操作：${result['status']}'))); }
   void _pauseDownload() { downloadController?.pause(); if (mounted) setState(() { downloading = false; downloadPaused = true; }); }
   void _cancelDownload() { downloadController?.cancel(); if (mounted) setState(() { downloading = false; downloadPaused = false; }); }
   @override
@@ -418,5 +420,10 @@ class _SettingsPageState extends State<_SettingsPage> {
     FilledButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile), label: const Text('从本地 APK 更新')),
     const SizedBox(height: 8),
     const Text('更新会交给 Android 系统安装器处理，应用不会绕过系统确认。', style: TextStyle(color: Colors.white60)),
+    const SizedBox(height: 16),
+    const Text('配置备份', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8),
+    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file), label: const Text('导出脱敏备份'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open), label: const Text('导入备份')))]),
+    const Text('备份不包含 API Key、AppSecret、角色卡和会话记录。', style: TextStyle(color: Colors.white60)),
   ]);
 }

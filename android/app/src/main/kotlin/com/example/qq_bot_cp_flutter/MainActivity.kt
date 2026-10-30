@@ -21,6 +21,8 @@ class MainActivity : FlutterActivity() {
     private val methodChannel = "qq_bot_cp/runtime"
     private val eventChannel = "qq_bot_cp/runtime_events"
     private val apkPickerRequest = 1901
+    private val backupExportRequest = 2001
+    private val backupImportRequest = 2002
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -41,6 +43,8 @@ class MainActivity : FlutterActivity() {
                 "verifyAndInstallUpdate" -> verifyAndInstallUpdate(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getThemeSettings" -> result.success(themeSettings())
                 "saveThemeSettings" -> { saveThemeSettings(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "exportBackup" -> exportBackup(result)
+                "importBackup" -> importBackup(result)
                 else -> result.notImplemented()
             }
         }
@@ -182,9 +186,22 @@ class MainActivity : FlutterActivity() {
     }
 
     private var pendingInstallResult: MethodChannel.Result? = null
+    private var pendingBackupResult: MethodChannel.Result? = null
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == backupExportRequest) {
+            val result = pendingBackupResult; pendingBackupResult = null
+            if (resultCode != RESULT_OK || data?.data == null) { result?.success(mapOf("status" to "cancelled")); return }
+            try { contentResolver.openOutputStream(data.data!!)?.use { it.write(backupJson().toString().toByteArray(Charsets.UTF_8)) }; result?.success(mapOf("status" to "exported")) } catch (error: Exception) { result?.error("BACKUP_EXPORT_ERROR", error.message, null) }
+            return
+        }
+        if (requestCode == backupImportRequest) {
+            val result = pendingBackupResult; pendingBackupResult = null
+            if (resultCode != RESULT_OK || data?.data == null) { result?.success(mapOf("status" to "cancelled")); return }
+            try { val json = contentResolver.openInputStream(data.data!!)?.bufferedReader()?.use { it.readText() } ?: throw IllegalArgumentException("无法读取备份"); restoreBackup(JSONObject(json)); result?.success(mapOf("status" to "imported")) } catch (error: Exception) { result?.success(mapOf("status" to "rejected", "reason" to (error.message ?: "备份格式错误"))) }
+            return
+        }
         if (requestCode != apkPickerRequest) return
         val result = pendingInstallResult
         pendingInstallResult = null
@@ -209,6 +226,30 @@ class MainActivity : FlutterActivity() {
         } catch (error: Exception) {
             result?.error("INSTALLER_ERROR", error.message, null)
         }
+    }
+
+    private fun exportBackup(result: MethodChannel.Result) {
+        pendingBackupResult = result
+        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply { type = "application/json"; putExtra(Intent.EXTRA_TITLE, "qq-bot-cp-backup.json") }, backupExportRequest)
+    }
+
+    private fun importBackup(result: MethodChannel.Result) {
+        pendingBackupResult = result
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "application/json" }, backupImportRequest)
+    }
+
+    private fun backupJson(): JSONObject {
+        val config = getSharedPreferences("public-config", MODE_PRIVATE)
+        val theme = getSharedPreferences("theme", MODE_PRIVATE)
+        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false)))
+    }
+
+    private fun restoreBackup(json: JSONObject) {
+        require(json.optInt("schemaVersion", 0) == 1) { "不支持的备份版本" }
+        val config = json.optJSONObject("publicConfig") ?: JSONObject()
+        getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).apply()
+        val theme = json.optJSONObject("theme") ?: JSONObject()
+        getSharedPreferences("theme", MODE_PRIVATE).edit().putString("mode", theme.optString("mode", "dark")).putInt("seedColor", theme.optInt("seedColor", 0xff8290ff.toInt())).putFloat("cardRadius", theme.optDouble("cardRadius", 16.0).toFloat()).putFloat("cardOpacity", theme.optDouble("cardOpacity", 1.0).toFloat()).putBoolean("tintedBackground", theme.optBoolean("tintedBackground", false)).apply()
     }
 
     private fun validateApk(file: File): Map<String, String> {
