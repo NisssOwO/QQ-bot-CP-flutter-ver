@@ -373,21 +373,26 @@ class MainActivity : FlutterActivity() {
             result?.success(mapOf("status" to "cancelled"))
             return
         }
-        try {
-            val cached = File(cacheDir, "pending-update.apk")
-            contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(cached).use { output -> input.copyTo(output) } } ?: throw IllegalArgumentException("无法读取 APK 文件")
-            val validation = validateApk(cached)
-            if (validation["ok"] != "true") {
-                result?.success(mapOf("status" to "rejected", "reason" to (validation["reason"] ?: "APK 校验失败"), "sha256" to (validation["sha256"] ?: "")))
-                return
+        ioExecutor.execute {
+            try {
+                val cached = File(cacheDir, "pending-update.apk")
+                contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(cached).use { output -> input.copyTo(output) } } ?: throw IllegalArgumentException("无法读取 APK 文件")
+                val validation = validateApk(cached)
+                runOnUiThread {
+                    if (validation["ok"] != "true") {
+                        result?.success(mapOf("status" to "rejected", "reason" to (validation["reason"] ?: "APK 校验失败"), "sha256" to (validation["sha256"] ?: "")))
+                        return@runOnUiThread
+                    }
+                    val cachedUri = FileProvider.getUriForFile(this, "$packageName.fileprovider", cached)
+                    startActivity(Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(cachedUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                    result?.success(mapOf("status" to "installer_opened"))
+                }
+            } catch (error: Exception) {
+                runOnUiThread { result?.error("INSTALLER_ERROR", error.message, null) }
             }
-            startActivity(Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            })
-            result?.success(mapOf("status" to "installer_opened"))
-        } catch (error: Exception) {
-            result?.error("INSTALLER_ERROR", error.message, null)
         }
     }
 
