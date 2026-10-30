@@ -34,3 +34,13 @@ class PublicConfig {
         llmConfigured: llmConfigured ?? this.llmConfigured,
       );
 }
+
+@immutable
+class AiConfigHistory {
+  const AiConfigHistory({required this.protocol, required this.model, required this.baseUrl});
+  final String protocol;
+  final String model;
+  final String baseUrl;
+
+  String get label => '${protocol.isEmpty ? '未指定接口' : protocol} · ${model.isEmpty ? '未指定模型' : model}';
+}

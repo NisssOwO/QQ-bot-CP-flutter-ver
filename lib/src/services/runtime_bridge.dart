@@ -58,5 +58,16 @@ class RuntimeBridge {
         'protocol': protocol, 'model': model, 'baseUrl': baseUrl,
         'appId': appId, 'secret': secret, 'apiKey': apiKey,
       });
+
+  Future<List<AiConfigHistory>> configHistory() async {
+    final raw = await _methods.invokeListMethod<dynamic>('getConfigHistory') ?? const [];
+    return raw.whereType<Map>().map((item) => AiConfigHistory(
+      protocol: '${item['protocol'] ?? ''}',
+      model: '${item['model'] ?? ''}',
+      baseUrl: '${item['baseUrl'] ?? ''}',
+    )).toList();
+  }
+
+  Future<void> deleteConfigHistory() => _methods.invokeMethod<void>('deleteConfigHistory');
 }
 
