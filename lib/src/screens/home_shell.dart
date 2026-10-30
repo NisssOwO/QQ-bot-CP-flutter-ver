@@ -336,7 +336,8 @@ class _SettingsPageState extends State<_SettingsPage> {
     if (!mounted) return;
     setState(() => installing = false);
     final status = result['status'];
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(status == 'permission_required' ? '请先允许本应用安装未知来源应用' : status == 'installer_opened' ? '已打开系统安装器' : status == 'cancelled' ? '已取消选择' : '更新操作：$status')));
+    final reason = result['reason'];
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(status == 'permission_required' ? '请先允许本应用安装未知来源应用' : status == 'installer_opened' ? '已打开系统安装器' : status == 'cancelled' ? '已取消选择' : status == 'rejected' ? '已拒绝更新：$reason' : '更新操作：$status')));
   }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
