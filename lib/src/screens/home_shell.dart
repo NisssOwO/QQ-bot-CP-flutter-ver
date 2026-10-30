@@ -121,6 +121,7 @@ class _HomeShellState extends State<HomeShell> {
       _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp)),
       _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
+      _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
     return Scaffold(
@@ -134,6 +135,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: '总览'),
           NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'AI'),
           NavigationDestination(icon: Icon(Icons.article_outlined), selectedIcon: Icon(Icons.article), label: '日志'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '角色'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: '设置'),
         ],
       ),
@@ -424,6 +426,36 @@ class _SettingsPageState extends State<_SettingsPage> {
     const Text('配置备份', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8),
     Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file), label: const Text('导出脱敏备份'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open), label: const Text('导入备份')))]),
-    const Text('备份不包含 API Key、AppSecret、角色卡和会话记录。', style: TextStyle(color: Colors.white60)),
+    const Text('备份不包含 API Key、AppSecret 和会话记录；会包含你主动保存的默认角色卡。', style: TextStyle(color: Colors.white60)),
+  ]);
+}
+
+class _RolePage extends StatefulWidget {
+  const _RolePage({required this.bridge});
+  final RuntimeBridge bridge;
+  @override State<_RolePage> createState() => _RolePageState();
+}
+
+class _RolePageState extends State<_RolePage> {
+  final roleName = TextEditingController();
+  final rolePrompt = TextEditingController();
+  bool loading = true;
+  @override
+  void initState() { super.initState(); _load(); }
+  @override
+  void dispose() { roleName.dispose(); rolePrompt.dispose(); super.dispose(); }
+  Future<void> _load() async { final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); }
+  Future<void> _save() async { await widget.bridge.saveDefaultRole(name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('默认角色卡已保存'))); }
+  @override
+  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
+    const Text('角色管理', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8),
+    const Text('这里集中管理默认角色卡。聊天中的私聊/群聊角色切换仍由 Runtime 指令处理。', style: TextStyle(color: Colors.white60)),
+    const SizedBox(height: 16),
+    TextField(controller: roleName, enabled: !loading, decoration: const InputDecoration(labelText: '默认角色名称', hintText: '例如：七草日花', border: OutlineInputBorder())),
+    const SizedBox(height: 12),
+    TextField(controller: rolePrompt, enabled: !loading, minLines: 10, maxLines: 20, decoration: const InputDecoration(labelText: '人格提示词', hintText: '填写默认角色的人格、语气、行为规则和边界', alignLabelWithHint: true, border: OutlineInputBorder())),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存默认角色卡')),
   ]);
 }

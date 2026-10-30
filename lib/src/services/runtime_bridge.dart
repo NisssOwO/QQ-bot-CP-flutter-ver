@@ -79,5 +79,7 @@ class RuntimeBridge {
   Future<Map<String, Object?>> verifyAndInstallUpdate({required String path, required String sha256}) async => await _methods.invokeMapMethod<String, Object?>('verifyAndInstallUpdate', {'path': path, 'sha256': sha256}) ?? {};
   Future<Map<String, Object?>> exportBackup() async => await _methods.invokeMapMethod<String, Object?>('exportBackup') ?? {};
   Future<Map<String, Object?>> importBackup() async => await _methods.invokeMapMethod<String, Object?>('importBackup') ?? {};
+  Future<Map<String, String>> defaultRole() async => (await _methods.invokeMapMethod<String, Object?>('getDefaultRole') ?? {}).map((key, value) => MapEntry(key, '$value'));
+  Future<void> saveDefaultRole({required String name, required String prompt}) => _methods.invokeMethod<void>('saveDefaultRole', {'name': name, 'prompt': prompt});
 }
 
