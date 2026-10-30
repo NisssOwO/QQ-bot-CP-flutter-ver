@@ -26,8 +26,8 @@ class MainActivity : FlutterActivity() {
             }
         }
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, eventChannel).setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {}
-            override fun onCancel(arguments: Any?) {}
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { RuntimeEventBus.attach(events) }
+            override fun onCancel(arguments: Any?) { RuntimeEventBus.attach(null) }
         })
     }
 

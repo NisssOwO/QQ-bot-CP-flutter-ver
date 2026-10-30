@@ -64,6 +64,7 @@ class RuntimeService : Service() {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putString("status", status).putString("phase", phase)
             .putString("message", message).putLong("elapsedMs", elapsedMs).apply()
+        RuntimeEventBus.emit("info", "runtime", "$phase：$message", elapsedMs.takeIf { it > 0 })
     }
 
     private fun notification(text: String): Notification = Notification.Builder(this, CHANNEL)
