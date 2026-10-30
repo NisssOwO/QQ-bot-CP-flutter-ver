@@ -34,8 +34,8 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, methodChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startRuntime" -> { startRuntimeService(); result.success(null) }
-                "stopRuntime" -> { stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
-                "restartRuntime" -> { stopService(Intent(this, RuntimeService::class.java)); startRuntimeService(); result.success(null) }
+                "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
+                "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); stopService(Intent(this, RuntimeService::class.java)); startRuntimeService(); result.success(null) }
                 "getRuntimeState" -> result.success(runtimeState())
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
@@ -90,6 +90,13 @@ class MainActivity : FlutterActivity() {
     private fun startRuntimeService() {
         val intent = Intent(this, RuntimeService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+    }
+
+    private fun markRuntimeStopping(message: String) {
+        getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit()
+            .putString("status", "stopping").putString("phase", "process.stop").putString("message", message).apply()
+        RuntimeEventBus.emit("info", "runtime", "process.stop：$message")
+        RuntimeWidgetProvider.updateAll(this)
     }
 
     private fun openBatteryOptimizationSettings() {

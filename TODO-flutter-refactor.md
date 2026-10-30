@@ -135,6 +135,7 @@
 
 - [x] `restart.begin`：记录重启开始时间和 runId。
 - [x] `process.stop`：停止旧 Runtime，记录耗时和结果。
+- [x] 停止/重启命令发送后立即显示 `stopping/process.stop`，不等待 Service 销毁回调才更新 UI。
 - [x] `config.load`：读取公开配置和 Keystore 凭据。
 - [x] `runtime.prepare`：检查 Node、profile、权限和运行目录。
 - [x] `runtime.spawn`：启动 Node 子进程。
