@@ -17,7 +17,9 @@ class UpdateService {
       if (response.statusCode != 200) throw HttpException('更新清单返回 HTTP ${response.statusCode}');
       final decoded = await decodeJsonInBackground(body);
       if (decoded is! Map<String, dynamic>) throw const FormatException('更新清单格式错误');
-      return UpdateManifest.fromJson(decoded);
+      final manifest = UpdateManifest.fromJson(decoded);
+      manifest.validate();
+      return manifest;
     } finally {
       client.close(force: true);
     }
