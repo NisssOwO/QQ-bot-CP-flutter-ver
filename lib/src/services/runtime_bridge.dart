@@ -95,6 +95,8 @@ class RuntimeBridge {
   Future<Map<String, Object?>> verifyAndInstallUpdate({required String path, required String sha256}) async => ((await _call<Map<dynamic, dynamic>>('verifyAndInstallUpdate', {'path': path, 'sha256': sha256}, const Duration(minutes: 2))) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<Map<String, Object?>> exportBackup() async => ((await _call<Map<dynamic, dynamic>>('exportBackup')) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<Map<String, Object?>> importBackup() async => ((await _call<Map<dynamic, dynamic>>('importBackup', null, const Duration(seconds: 30))) ?? {}).map((key, value) => MapEntry('$key', value));
+  Future<List<Map<String, Object?>>> backups() async => (await _call<List<dynamic>>('getBackups') ?? const []).whereType<Map>().map((item) => item.map((key, value) => MapEntry('$key', value))).toList();
+  Future<Map<String, Object?>> restoreBackupFile(String path) async => ((await _call<Map<dynamic, dynamic>>('restoreBackupFile', {'path': path}, const Duration(seconds: 30))) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<Map<String, String>> defaultRole() async => ((await _call<Map<dynamic, dynamic>>('getDefaultRole')) ?? {}).map((key, value) => MapEntry('$key', '$value'));
   Future<void> saveDefaultRole({String id = '', required String name, required String prompt}) async { await _call<void>('saveDefaultRole', {'id': id, 'name': name, 'prompt': prompt}); }
   Future<List<RoleCard>> roles() async => (await _call<List<dynamic>>('getRoles') ?? const []).whereType<Map>().map(RoleCard.fromMap).toList();

@@ -50,6 +50,8 @@ class MainActivity : FlutterActivity() {
                 "saveThemeSettings" -> { saveThemeSettings(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "exportBackup" -> exportBackup(result)
                 "importBackup" -> importBackup(result)
+                "getBackups" -> result.success(listBackups())
+                "restoreBackupFile" -> restoreBackupFile(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getDefaultRole" -> result.success(defaultRole())
                 "saveDefaultRole" -> { saveDefaultRole(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "getRoles" -> result.success(roleCards())
@@ -379,6 +381,26 @@ class MainActivity : FlutterActivity() {
         createAutoBackup()
         pendingBackupResult = result
         startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "application/json" }, backupImportRequest)
+    }
+
+    private fun listBackups(): List<Map<String, Any>> {
+        val directory = File(filesDir, "backups")
+        return directory.listFiles()?.filter { it.isFile && it.extension == "json" }?.sortedByDescending { it.lastModified() }?.map {
+            mapOf("path" to it.absolutePath, "name" to it.name, "size" to it.length(), "modified" to it.lastModified())
+        } ?: emptyList()
+    }
+
+    private fun restoreBackupFile(values: Map<*, *>, result: MethodChannel.Result) {
+        try {
+            val directory = File(filesDir, "backups").canonicalFile
+            val file = File(values["path"] as? String ?: "").canonicalFile
+            require(file.parentFile == directory && file.isFile) { "备份文件路径无效" }
+            createAutoBackup()
+            restoreBackup(JSONObject(file.readText(Charsets.UTF_8)))
+            result.success(mapOf("status" to "restored"))
+        } catch (error: Exception) {
+            result.success(mapOf("status" to "rejected", "reason" to (error.message ?: "备份恢复失败")))
+        }
     }
 
     private fun exportRoleCard(values: Map<*, *>, result: MethodChannel.Result) {

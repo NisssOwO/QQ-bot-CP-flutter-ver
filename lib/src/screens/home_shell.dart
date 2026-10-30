@@ -358,6 +358,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   double cardOpacity = 1;
   bool tintedBackground = false;
   List<ThemeSettings> recentThemes = const [];
+  List<Map<String, Object?>> backups = const [];
   bool checkingUpdate = false;
   bool downloading = false;
   double downloadProgress = 0;
@@ -368,7 +369,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   @override
   void dispose() { updateUrl.dispose(); super.dispose(); }
   double _snapOpacity(double value) => [0.7, 0.85, 1.0].reduce((a, b) => (value - a).abs() < (value - b).abs() ? a : b);
-  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); if (mounted) setState(() { info = value; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
   Future<void> _install() async {
@@ -407,6 +408,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   }
   Future<void> _exportBackup() async { final result = await widget.bridge.exportBackup(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '脱敏备份已导出' : '备份操作：${result['status']}'))); }
   Future<void> _importBackup() async { final result = await widget.bridge.importBackup(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'imported' ? '备份已恢复，重启应用后完全生效' : result['status'] == 'rejected' ? '备份被拒绝：${result['reason']}' : '备份操作：${result['status']}'))); }
+  Future<void> _restoreBackup(Map<String, Object?> backup) async { final name = '${backup['name'] ?? '备份'}'; final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('恢复自动备份？'), content: Text('将先创建当前状态的安全备份，再恢复 $name。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('恢复'))])) ?? false; if (!ok) return; final result = await widget.bridge.restoreBackupFile('${backup['path'] ?? ''}'); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'restored' ? '备份已恢复，请重启 Runtime' : '恢复失败：${result['reason'] ?? '未知错误'}'))); }
   Future<void> _clearData(String kind, String title, String message) async { final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('确定清除'))])) ?? false; if (!ok) return; await widget.bridge.clearData(kind); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('清理完成'))); }
   void _pauseDownload() { downloadController?.pause(); if (mounted) setState(() { downloading = false; downloadPaused = true; }); }
   void _cancelDownload() { downloadController?.cancel(); if (mounted) setState(() { downloading = false; downloadPaused = false; }); }
@@ -453,6 +455,9 @@ class _SettingsPageState extends State<_SettingsPage> {
     const SizedBox(height: 8),
     Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file), label: const Text('导出脱敏备份'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open), label: const Text('导入备份')))]),
     const Text('备份不包含 API Key、AppSecret 和会话记录；会包含你主动保存的默认角色卡。', style: TextStyle(color: Colors.white60)),
+    const SizedBox(height: 8),
+    if (backups.isEmpty) const Text('暂无自动备份', style: TextStyle(color: Colors.white60)),
+    ...backups.map((backup) => Card(child: ListTile(leading: const Icon(Icons.backup), title: Text('${backup['name'] ?? '自动备份'}'), subtitle: Text('${((backup['size'] as num?)?.toInt() ?? 0) ~/ 1024} KB'), trailing: TextButton(onPressed: () => _restoreBackup(backup), child: const Text('恢复'))))),
     const SizedBox(height: 16),
     const Text('数据清理', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8),
