@@ -108,7 +108,7 @@
 - [x] 接入 OpenAI Chat Completions（DSH `relay` 路由）。
 - [x] 接入 OpenAI Responses（通过 `LLM_API` 选择 wire protocol）。
 - [x] 接入 Anthropic Messages（通过 `LLM_API` 选择 wire protocol）。
-- [ ] 保留自定义 OpenAI-compatible 接口。
+- [x] 保留自定义 OpenAI-compatible 接口（`openai-compatible` 映射到 DSH `openai-completions`，Base URL 可自定义）。
 - [x] 每个协议提供能力声明：是否支持流式、视觉、工具调用、思考参数。
 - [x] 协议错误统一转换为可读错误码。
 
@@ -125,7 +125,7 @@
 ### P3.3 安全存储
 
 - [x] AppSecret、API Key 使用 Keystore 加密。
-- [ ] 配置导出默认脱敏，不导出密钥。
+- [x] 配置导出默认脱敏，不导出密钥（备份 JSON 只包含公开配置、主题和角色数据）。
 - [ ] 日志过滤 `Bearer`、`API_KEY`、`SECRET`、Token 和请求体。
 - [x] 清除全部配置时明确提示凭据会被删除；卸载行为仍由 Android 系统处理。
 
@@ -173,9 +173,9 @@
 ### P6.1 前台服务
 
 - [x] 运行 Runtime 时使用 Foreground Service。
-- [x] 常驻通知已建立；当前显示 Runtime 阶段，QQ/AI/网络细分事件仍待 Runtime 提供。
+- [x] 常驻通知已建立；显示 Runtime 阶段，细分状态在总览、小组件和日志中展示。
 - [x] 通知提供“打开应用”“停止 Runtime”操作。
-- [ ] 引导用户关闭电池优化，但不强制修改系统设置。
+- [x] 引导用户关闭电池优化，但不强制修改系统设置（设置页跳转系统页面）。
 - [ ] 处理 Android 9、MIUI/HyperOS 的后台限制差异。
 
 ### P6.2 网络重连
@@ -207,7 +207,7 @@
 - [x] 解析 APK 元数据（代码完成，正式签名升级包待真机验收）。
 - [x] 拒绝包名不匹配、签名不匹配和版本回退包。
 - [x] 支持从本地存储导入更新包后安装（交由系统安装器处理）。
-- [ ] 更新过程不能覆盖用户凭据、角色卡和会话数据。
+- [x] 更新过程使用 Android 包安装器覆盖安装，不删除应用私有数据；凭据、角色卡和会话由应用数据目录独立保存。
 
 ## P8：桌面小组件
 
