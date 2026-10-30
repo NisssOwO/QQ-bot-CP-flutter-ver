@@ -11,6 +11,7 @@ import '../services/endpoint_test_service.dart';
 import '../models/update_manifest.dart';
 import '../services/update_service.dart';
 import '../theme/theme_controller.dart';
+import '../theme/theme_bridge.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.onThemeChanged});
@@ -339,6 +340,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   double cardRadius = 16;
   double cardOpacity = 1;
   bool tintedBackground = false;
+  List<ThemeSettings> recentThemes = const [];
   bool checkingUpdate = false;
   bool downloading = false;
   double downloadProgress = 0;
@@ -348,7 +350,9 @@ class _SettingsPageState extends State<_SettingsPage> {
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { updateUrl.dispose(); super.dispose(); }
-  Future<void> _load() async { final value = await widget.bridge.appInfo(); if (mounted) setState(() => info = value); }
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); if (mounted) setState(() { info = value; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = saved.cardOpacity; tintedBackground = saved.tintedBackground; }); }
+  void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
+  void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
   Future<void> _install() async {
     setState(() => installing = true);
     final result = await widget.bridge.pickAndInstallApk();
@@ -389,14 +393,15 @@ class _SettingsPageState extends State<_SettingsPage> {
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 12),
-    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); widget.onThemeChanged?.call(ThemeSettings(mode: value, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground)); } }),
+    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); _applyTheme(); } }),
     const SizedBox(height: 8),
-    DropdownButtonFormField<Color>(value: seedColor, decoration: const InputDecoration(labelText: '主色', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: Color(0xff8290ff), child: Text('靛蓝')), DropdownMenuItem(value: Color(0xff4dd0e1), child: Text('青色')), DropdownMenuItem(value: Color(0xffff8a65), child: Text('珊瑚橙')), DropdownMenuItem(value: Color(0xffce93d8), child: Text('紫色'))], onChanged: (value) { if (value != null) { setState(() => seedColor = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: value, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground)); } }),
+    DropdownButtonFormField<Color>(value: seedColor, decoration: const InputDecoration(labelText: '主色', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: Color(0xff8290ff), child: Text('靛蓝')), DropdownMenuItem(value: Color(0xff4dd0e1), child: Text('青色')), DropdownMenuItem(value: Color(0xffff8a65), child: Text('珊瑚橙')), DropdownMenuItem(value: Color(0xffce93d8), child: Text('紫色'))], onChanged: (value) { if (value != null) { setState(() => seedColor = value); _applyTheme(); } }),
     const SizedBox(height: 8),
-    DropdownButtonFormField<double>(value: cardRadius, decoration: const InputDecoration(labelText: '卡片圆角', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 8, child: Text('小')), DropdownMenuItem(value: 16, child: Text('中')), DropdownMenuItem(value: 24, child: Text('大'))], onChanged: (value) { if (value != null) { setState(() => cardRadius = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: value, cardOpacity: cardOpacity, tintedBackground: tintedBackground)); } }),
+    DropdownButtonFormField<double>(value: cardRadius, decoration: const InputDecoration(labelText: '卡片圆角', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 8, child: Text('小')), DropdownMenuItem(value: 16, child: Text('中')), DropdownMenuItem(value: 24, child: Text('大'))], onChanged: (value) { if (value != null) { setState(() => cardRadius = value); _applyTheme(); } }),
     const SizedBox(height: 8),
-    DropdownButtonFormField<double>(value: cardOpacity, decoration: const InputDecoration(labelText: '卡片透明度', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 0.7, child: Text('高透明')), DropdownMenuItem(value: 0.85, child: Text('半透明')), DropdownMenuItem(value: 1.0, child: Text('不透明'))], onChanged: (value) { if (value != null) { setState(() => cardOpacity = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: value, tintedBackground: tintedBackground)); } }),
-    SwitchListTile(title: const Text('柔和背景'), subtitle: const Text('使用轻微着色背景'), value: tintedBackground, onChanged: (value) { setState(() => tintedBackground = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: value)); }),
+    DropdownButtonFormField<double>(value: cardOpacity, decoration: const InputDecoration(labelText: '卡片透明度', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 0.7, child: Text('高透明')), DropdownMenuItem(value: 0.85, child: Text('半透明')), DropdownMenuItem(value: 1.0, child: Text('不透明'))], onChanged: (value) { if (value != null) { setState(() => cardOpacity = value); _applyTheme(); } }),
+    SwitchListTile(title: const Text('柔和背景'), subtitle: const Text('使用轻微着色背景'), value: tintedBackground, onChanged: (value) { setState(() => tintedBackground = value); _applyTheme(); }),
+    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _resetTheme, icon: const Icon(Icons.restart_alt), label: const Text('恢复默认主题'))), if (recentThemes.isNotEmpty) IconButton(tooltip: '恢复最近主题', onPressed: () { final recent = recentThemes.first; setState(() { themeMode = recent.mode; seedColor = recent.seedColor; cardRadius = recent.cardRadius; cardOpacity = recent.cardOpacity; tintedBackground = recent.tintedBackground; }); _applyTheme(); }, icon: const Icon(Icons.history))]),
     const SizedBox(height: 16),
     Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
     Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),
