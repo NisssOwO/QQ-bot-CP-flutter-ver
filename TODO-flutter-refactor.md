@@ -55,6 +55,7 @@
 - [x] Flutter 只负责 UI、状态管理、配置编辑和用户交互。
 - [x] 原生 Android Foreground Service 负责启动/停止/重启 Node/DSH Runtime；当前已完成服务和进程控制骨架，真实凭据启动尚未真机验证。
 - [x] 使用 MethodChannel 发送命令：`startRuntime`、`stopRuntime`、`restartRuntime`。
+- [x] Flutter 桥接调用统一增加超时和 `RuntimeBridgeException` 错误码；取消与自动重试仍按具体操作补齐。
 - [x] 使用 EventChannel 推送 Runtime 阶段和 Node 输出日志；网络状态、更新进度仍未接入。
 - [x] 统一定义状态模型：`stopped`、`starting`、`online`、`reconnecting`、`failed`、`stopping`。
 - [ ] 所有桥接调用都提供超时、取消、错误码和重试策略。
