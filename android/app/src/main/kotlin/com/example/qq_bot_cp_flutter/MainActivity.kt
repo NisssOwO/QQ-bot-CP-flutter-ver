@@ -16,11 +16,14 @@ import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import android.provider.Settings
 import android.net.Uri
 import androidx.core.content.FileProvider
 
 class MainActivity : FlutterActivity() {
+    private val ioExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val methodChannel = "qq_bot_cp/runtime"
     private val eventChannel = "qq_bot_cp/runtime_events"
     private val apkPickerRequest = 1901
@@ -28,6 +31,11 @@ class MainActivity : FlutterActivity() {
     private val backupImportRequest = 2002
     private val roleExportRequest = 2101
     private val roleImportRequest = 2102
+
+    override fun onDestroy() {
+        ioExecutor.shutdownNow()
+        super.onDestroy()
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -530,15 +538,40 @@ class MainActivity : FlutterActivity() {
     private fun verifyAndInstallUpdate(values: Map<*, *>, result: MethodChannel.Result) {
         val file = File(values["path"] as? String ?: "")
         val expected = (values["sha256"] as? String ?: "").trim().lowercase()
-        if (!file.isFile) { result.success(mapOf("status" to "rejected", "reason" to "下载文件不存在")); return }
+        ioExecutor.execute {
+            try {
+                if (!file.isFile) {
+                    runOnUiThread { result.success(mapOf("status" to "rejected", "reason" to "下载文件不存在")) }
+                    return@execute
+                }
+                val actual = sha256(file)
+                if (expected.isNotEmpty() && actual != expected) {
+                    runOnUiThread { result.success(mapOf("status" to "rejected", "reason" to "SHA-256 校验失败", "sha256" to actual)) }
+                    return@execute
+                }
+                val validation = validateApk(file)
+                if (validation["ok"] != "true") {
+                    runOnUiThread { result.success(mapOf("status" to "rejected", "reason" to (validation["reason"] ?: "APK 校验失败"), "sha256" to actual)) }
+                    return@execute
+                }
+                runOnUiThread {
+                    val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                    startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) })
+                    result.success(mapOf("status" to "installer_opened", "sha256" to actual))
+                }
+            } catch (error: Exception) {
+                runOnUiThread { result.error("UPDATE_VERIFY_ERROR", error.message, null) }
+            }
+        }
+    }
+
+    private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input -> val buffer = ByteArray(8192); var count = input.read(buffer); while (count > 0) { digest.update(buffer, 0, count); count = input.read(buffer) } }
-        val actual = digest.digest().joinToString("") { "%02x".format(it) }
-        if (expected.isNotEmpty() && actual != expected) { result.success(mapOf("status" to "rejected", "reason" to "SHA-256 校验失败", "sha256" to actual)); return }
-        val validation = validateApk(file)
-        if (validation["ok"] != "true") { result.success(mapOf("status" to "rejected", "reason" to (validation["reason"] ?: "APK 校验失败"), "sha256" to actual)); return }
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) })
-        result.success(mapOf("status" to "installer_opened", "sha256" to actual))
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var count = input.read(buffer)
+            while (count > 0) { digest.update(buffer, 0, count); count = input.read(buffer) }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }
