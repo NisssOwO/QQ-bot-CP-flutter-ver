@@ -227,7 +227,9 @@ class _LogPage extends StatefulWidget {
 class _LogPageState extends State<_LogPage> {
   LogLevel? level;
   String module = '';
-  String _redacted(String value) => value.replaceAll(RegExp(r'(bearer\s+|api[_-]?key\s*[:=]\s*|secret\s*[:=]\s*|token\s*[:=]\s*)[^\s,;]+', caseSensitive: false), r'\1[REDACTED]');
+  String _redacted(String value) => value
+      .replaceAll(RegExp(r'(bearer\s+|api[_-]?key\s*[:=]\s*|app[_-]?secret\s*[:=]\s*|authorization\s*[:=]\s*|secret\s*[:=]\s*|token\s*[:=]\s*)[^\s,;]+', caseSensitive: false), r'\1[REDACTED]')
+      .replaceAll(RegExp(r'("(?:api[_-]?key|app[_-]?secret|token|authorization|bearer)"\s*:\s*")[^"]*(")', caseSensitive: false), r'\1[REDACTED]\2');
   Future<void> _export() async {
     final content = widget.logs.map((entry) => '${entry.time.toIso8601String()} [${entry.level.name}] ${entry.module} ${entry.errorCode == null ? '' : '[${entry.errorCode}] '}${_redacted(entry.message)}').join('\n');
     await Clipboard.setData(ClipboardData(text: content));
