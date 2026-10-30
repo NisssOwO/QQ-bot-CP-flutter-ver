@@ -11,6 +11,8 @@
 - Flutter 版本：3.47.9 stable
 - JDK：17
 - 当前 Debug APK 约 330 MB；正式发布前仍需完成签名、ABI 和安装升级验收
+- Release 使用不提交到 Git 的工作区 keystore；不要删除或更换它，否则升级安装会因签名不一致失败
+- 当前 Release APK：`200,543,659` 字节（约 191.2 MiB）；SHA-256：`c4a011ee03a18c8303e89477930066529a76a36b2016515e25503233ebdfd5d0`
 
 ## 构建
 
@@ -22,6 +24,8 @@ dart analyze
 flutter test
 Set-Location .\android
 .\gradlew.bat assembleDebug --no-daemon
+# 正式签名 Release（需要本机 android/keystore.properties）
+.\gradlew.bat assembleRelease --no-daemon
 ```
 
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
