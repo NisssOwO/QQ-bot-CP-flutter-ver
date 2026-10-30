@@ -334,6 +334,8 @@ class _SettingsPageState extends State<_SettingsPage> {
   bool checkingUpdate = false;
   bool downloading = false;
   double downloadProgress = 0;
+  bool downloadPaused = false;
+  UpdateDownloadController? downloadController;
   @override
   void initState() { super.initState(); _load(); }
   @override
@@ -360,16 +362,21 @@ class _SettingsPageState extends State<_SettingsPage> {
   Future<void> _downloadAndInstall() async {
     final value = manifest;
     if (value == null) return;
-    setState(() { downloading = true; downloadProgress = 0; });
+    setState(() { downloading = true; downloadPaused = false; });
     try {
       final path = await widget.bridge.updateCachePath();
-      await const UpdateService().download(value, path, onProgress: (received, total) { if (mounted) setState(() => downloadProgress = total > 0 ? received / total : 0); });
+      downloadController ??= UpdateDownloadController(value, path, (received, total) { if (mounted) setState(() => downloadProgress = total > 0 ? received / total : 0); });
+      await downloadController!.start();
+      if (downloadController!.paused) { if (mounted) setState(() { downloading = false; downloadPaused = true; }); return; }
+      if (downloadController!.cancelled) { if (mounted) setState(() { downloading = false; downloadPaused = false; }); return; }
       final result = await widget.bridge.verifyAndInstallUpdate(path: path, sha256: value.sha256);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'installer_opened' ? '下载校验成功，已打开系统安装器' : '更新被拒绝：${result['reason'] ?? '未知原因'}')));
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载更新失败：$error')));
-    } finally { if (mounted) setState(() => downloading = false); }
+    } finally { if (mounted && !downloadPaused) setState(() => downloading = false); }
   }
+  void _pauseDownload() { downloadController?.pause(); if (mounted) setState(() { downloading = false; downloadPaused = true; }); }
+  void _cancelDownload() { downloadController?.cancel(); if (mounted) setState(() { downloading = false; downloadPaused = false; }); }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -382,8 +389,8 @@ class _SettingsPageState extends State<_SettingsPage> {
     FilledButton.tonalIcon(onPressed: checkingUpdate || updateUrl.text.trim().isEmpty ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
     if (manifest != null) ...[
       Card(child: ListTile(title: Text('最新版本 ${manifest!.versionName} · ${manifest!.abi}'), subtitle: Text('${manifest!.releaseNotes}\n大小：${manifest!.sizeLabel}\nSHA-256：${manifest!.sha256}'), isThreeLine: true)),
-      if (downloading) LinearProgressIndicator(value: downloadProgress),
-      FilledButton.icon(onPressed: downloading || manifest!.apkUrl.isEmpty ? null : _downloadAndInstall, icon: const Icon(Icons.download), label: Text(downloading ? '下载中 ${(downloadProgress * 100).toStringAsFixed(0)}%' : '下载并安装更新')),
+      if (downloading) ...[LinearProgressIndicator(value: downloadProgress), Row(children: [Expanded(child: Text('下载中 ${(downloadProgress * 100).toStringAsFixed(0)}%')), IconButton(tooltip: '暂停', onPressed: _pauseDownload, icon: const Icon(Icons.pause)), IconButton(tooltip: '取消', onPressed: _cancelDownload, icon: const Icon(Icons.close))])],
+      if (!downloading) FilledButton.icon(onPressed: manifest!.apkUrl.isEmpty ? null : _downloadAndInstall, icon: Icon(downloadPaused ? Icons.play_arrow : Icons.download), label: Text(downloadPaused ? '继续下载' : '下载并安装更新')),
     ],
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile), label: const Text('从本地 APK 更新')),
