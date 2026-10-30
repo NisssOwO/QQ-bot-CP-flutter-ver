@@ -19,6 +19,7 @@ class RuntimeBridge {
           module: '${raw['module'] ?? 'runtime'}',
           message: '${raw['message'] ?? ''}',
           elapsedMs: raw['elapsedMs'] as int?,
+          runId: raw['runId'] as String?,
         );
       });
 

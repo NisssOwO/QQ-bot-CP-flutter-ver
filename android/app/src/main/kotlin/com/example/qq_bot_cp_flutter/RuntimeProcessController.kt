@@ -25,7 +25,8 @@ class RuntimeProcessController(private val context: Context) {
         Thread { readStream(process!!.errorStream, "runtimeLastError") }.start()
         Thread {
             val exit = process?.waitFor() ?: -1
-            prefs.edit().putBoolean("runtimeProcessAlive", false).putString("status", "stopped").putInt("runtimeExitCode", exit).apply()
+            prefs.edit().putBoolean("runtimeProcessAlive", false).putString("status", if (exit == 0) "stopped" else "failed").putInt("runtimeExitCode", exit).apply()
+            RuntimeEventBus.emit(if (exit == 0) "info" else "error", "runtime", "Node/DSH 进程退出，退出码=$exit")
         }.start()
     }
 
