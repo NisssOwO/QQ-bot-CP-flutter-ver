@@ -8,6 +8,8 @@ import '../models/runtime_state.dart';
 import '../services/runtime_bridge.dart';
 import '../services/public_ip_service.dart';
 import '../services/endpoint_test_service.dart';
+import '../models/update_manifest.dart';
+import '../services/update_service.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -327,8 +329,13 @@ class _SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<_SettingsPage> {
   Map<String, String> info = const {};
   bool installing = false;
+  final updateUrl = TextEditingController();
+  UpdateManifest? manifest;
+  bool checkingUpdate = false;
   @override
   void initState() { super.initState(); _load(); }
+  @override
+  void dispose() { updateUrl.dispose(); super.dispose(); }
   Future<void> _load() async { final value = await widget.bridge.appInfo(); if (mounted) setState(() => info = value); }
   Future<void> _install() async {
     setState(() => installing = true);
@@ -339,12 +346,26 @@ class _SettingsPageState extends State<_SettingsPage> {
     final reason = result['reason'];
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(status == 'permission_required' ? '请先允许本应用安装未知来源应用' : status == 'installer_opened' ? '已打开系统安装器' : status == 'cancelled' ? '已取消选择' : status == 'rejected' ? '已拒绝更新：$reason' : '更新操作：$status')));
   }
+  Future<void> _checkUpdate() async {
+    setState(() => checkingUpdate = true);
+    try {
+      final value = await const UpdateService().check(updateUrl.text);
+      if (mounted) setState(() => manifest = value);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('检查更新失败：$error')));
+    } finally { if (mounted) setState(() => checkingUpdate = false); }
+  }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 16),
     Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
     Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),
+    const SizedBox(height: 12),
+    TextField(controller: updateUrl, onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: '更新清单 URL', hintText: '留空；填写公开 JSON 地址', border: OutlineInputBorder())),
+    const SizedBox(height: 8),
+    FilledButton.tonalIcon(onPressed: checkingUpdate || updateUrl.text.trim().isEmpty ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
+    if (manifest != null) Card(child: ListTile(title: Text('最新版本 ${manifest!.versionName} · ${manifest!.abi}'), subtitle: Text('${manifest!.releaseNotes}\n大小：${manifest!.sizeLabel}\nSHA-256：${manifest!.sha256}'), isThreeLine: true)),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile), label: const Text('从本地 APK 更新')),
     const SizedBox(height: 8),
