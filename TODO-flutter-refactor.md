@@ -27,7 +27,7 @@
 - [x] 创建 Flutter Android 工程和包名 `com.shinycolors.officialbot`；APK 已通过 aapt 验证应用 ID 和启动 Activity。
 - [x] 固定 Flutter、Dart、Android Gradle Plugin、Gradle、JDK 版本，并提供 `tool/check-toolchain.ps1` 校验脚本。
 - [x] 建立 `lib/`、`android/`、`test/`、`tool/` 目录。`integration_test/` 尚未建立。
-- [ ] 配置 debug、release、arm64-v8a 构建变体。
+- [x] 配置 debug、release、arm64-v8a 构建入口；arm64 专用 Debug 使用 `tool/build-arm64-debug.ps1`。
 - [x] 配置 lint 和静态检查；`dart analyze` 已通过。format、CI 尚未接入。
 - [x] 添加不包含任何用户数据的空配置页面和示例模型。
 

@@ -29,6 +29,12 @@ Set-Location .\android
 powershell -ExecutionPolicy Bypass -File .\tool\audit-release.ps1
 ```
 
+构建 arm64 专用 Debug APK：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\build-arm64-debug.ps1
+```
+
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
 
 Runtime Bundle 不作为普通 Git 文件提交。准备干净 Runtime 时执行：
