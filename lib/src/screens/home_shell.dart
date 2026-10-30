@@ -352,7 +352,8 @@ class _SettingsPageState extends State<_SettingsPage> {
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { updateUrl.dispose(); super.dispose(); }
-  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); if (mounted) setState(() { info = value; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = saved.cardOpacity; tintedBackground = saved.tintedBackground; }); }
+  double _snapOpacity(double value) => [0.7, 0.85, 1.0].reduce((a, b) => (value - a).abs() < (value - b).abs() ? a : b);
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); if (mounted) setState(() { info = value; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
   Future<void> _install() async {
@@ -391,6 +392,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   }
   Future<void> _exportBackup() async { final result = await widget.bridge.exportBackup(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '脱敏备份已导出' : '备份操作：${result['status']}'))); }
   Future<void> _importBackup() async { final result = await widget.bridge.importBackup(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'imported' ? '备份已恢复，重启应用后完全生效' : result['status'] == 'rejected' ? '备份被拒绝：${result['reason']}' : '备份操作：${result['status']}'))); }
+  Future<void> _clearData(String kind, String title, String message) async { final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: Text(title), content: Text(message), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('确定清除'))])) ?? false; if (!ok) return; await widget.bridge.clearData(kind); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('清理完成'))); }
   void _pauseDownload() { downloadController?.pause(); if (mounted) setState(() { downloading = false; downloadPaused = true; }); }
   void _cancelDownload() { downloadController?.cancel(); if (mounted) setState(() { downloading = false; downloadPaused = false; }); }
   @override
@@ -427,6 +429,12 @@ class _SettingsPageState extends State<_SettingsPage> {
     const SizedBox(height: 8),
     Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file), label: const Text('导出脱敏备份'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open), label: const Text('导入备份')))]),
     const Text('备份不包含 API Key、AppSecret 和会话记录；会包含你主动保存的默认角色卡。', style: TextStyle(color: Colors.white60)),
+    const SizedBox(height: 16),
+    const Text('数据清理', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8),
+    OutlinedButton.icon(onPressed: () => _clearData('logs', '清除 Runtime 日志？', '只删除输出日志，不影响配置和会话。'), icon: const Icon(Icons.article_outlined), label: const Text('清除日志')),
+    OutlinedButton.icon(onPressed: () => _clearData('sessions', '清除会话？', '会删除 Runtime 会话索引和上下文，不能恢复。'), icon: const Icon(Icons.history), label: const Text('清除会话')),
+    OutlinedButton.icon(onPressed: () => _clearData('all', '清除全部配置？', '将删除 AI/QQ 凭据、主题、默认角色卡和历史配置，操作不可恢复。'), icon: const Icon(Icons.delete_forever), label: const Text('清除全部配置')),
   ]);
 }
 

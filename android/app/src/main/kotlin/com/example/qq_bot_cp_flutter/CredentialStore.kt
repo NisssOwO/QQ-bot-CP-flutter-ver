@@ -33,6 +33,12 @@ class CredentialStore(context: Context) {
         return String(cipher.doFinal(encrypted), StandardCharsets.UTF_8)
     }
 
+    fun clear() {
+        prefs.edit().clear().apply()
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        if (store.containsAlias("qq-bot-cp-credentials-v1")) store.deleteEntry("qq-bot-cp-credentials-v1")
+    }
+
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val alias = "qq-bot-cp-credentials-v1"

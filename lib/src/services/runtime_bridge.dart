@@ -81,5 +81,6 @@ class RuntimeBridge {
   Future<Map<String, Object?>> importBackup() async => await _methods.invokeMapMethod<String, Object?>('importBackup') ?? {};
   Future<Map<String, String>> defaultRole() async => (await _methods.invokeMapMethod<String, Object?>('getDefaultRole') ?? {}).map((key, value) => MapEntry(key, '$value'));
   Future<void> saveDefaultRole({required String name, required String prompt}) => _methods.invokeMethod<void>('saveDefaultRole', {'name': name, 'prompt': prompt});
+  Future<void> clearData(String kind) => _methods.invokeMethod<void>('clearData', {'kind': kind});
 }
 
