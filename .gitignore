@@ -5,3 +5,4 @@ android/local.properties
 .idea/
 .vscode/
 *.iml
+android/app/src/main/assets/runtime/
