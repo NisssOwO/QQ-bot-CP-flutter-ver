@@ -1,0 +1,36 @@
+import 'package:flutter/foundation.dart';
+
+@immutable
+class PublicConfig {
+  const PublicConfig({
+    this.protocol = '',
+    this.model = '',
+    this.baseUrl = '',
+    this.appId = '',
+    this.qqConfigured = false,
+    this.llmConfigured = false,
+  });
+
+  final String protocol;
+  final String model;
+  final String baseUrl;
+  final String appId;
+  final bool qqConfigured;
+  final bool llmConfigured;
+
+  PublicConfig copyWith({
+    String? protocol,
+    String? model,
+    String? baseUrl,
+    String? appId,
+    bool? qqConfigured,
+    bool? llmConfigured,
+  }) => PublicConfig(
+        protocol: protocol ?? this.protocol,
+        model: model ?? this.model,
+        baseUrl: baseUrl ?? this.baseUrl,
+        appId: appId ?? this.appId,
+        qqConfigured: qqConfigured ?? this.qqConfigured,
+        llmConfigured: llmConfigured ?? this.llmConfigured,
+      );
+}
