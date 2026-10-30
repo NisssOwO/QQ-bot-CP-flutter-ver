@@ -10,10 +10,11 @@ import '../services/public_ip_service.dart';
 import '../services/endpoint_test_service.dart';
 import '../models/update_manifest.dart';
 import '../services/update_service.dart';
+import '../theme/theme_controller.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.onThemeChanged});
-  final ValueChanged<ThemeMode>? onThemeChanged;
+  final ValueChanged<ThemeSettings>? onThemeChanged;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -324,7 +325,7 @@ class _PlaceholderPage extends StatelessWidget {
 class _SettingsPage extends StatefulWidget {
   const _SettingsPage({required this.bridge, this.onThemeChanged});
   final RuntimeBridge bridge;
-  final ValueChanged<ThemeMode>? onThemeChanged;
+  final ValueChanged<ThemeSettings>? onThemeChanged;
   @override State<_SettingsPage> createState() => _SettingsPageState();
 }
 
@@ -334,6 +335,8 @@ class _SettingsPageState extends State<_SettingsPage> {
   final updateUrl = TextEditingController();
   UpdateManifest? manifest;
   ThemeMode themeMode = ThemeMode.dark;
+  Color seedColor = const Color(0xff8290ff);
+  double cardRadius = 16;
   bool checkingUpdate = false;
   bool downloading = false;
   double downloadProgress = 0;
@@ -384,7 +387,11 @@ class _SettingsPageState extends State<_SettingsPage> {
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 12),
-    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); widget.onThemeChanged?.call(value); } }),
+    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); widget.onThemeChanged?.call(ThemeSettings(mode: value, seedColor: seedColor, cardRadius: cardRadius)); } }),
+    const SizedBox(height: 8),
+    DropdownButtonFormField<Color>(value: seedColor, decoration: const InputDecoration(labelText: '主色', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: Color(0xff8290ff), child: Text('靛蓝')), DropdownMenuItem(value: Color(0xff4dd0e1), child: Text('青色')), DropdownMenuItem(value: Color(0xffff8a65), child: Text('珊瑚橙')), DropdownMenuItem(value: Color(0xffce93d8), child: Text('紫色'))], onChanged: (value) { if (value != null) { setState(() => seedColor = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: value, cardRadius: cardRadius)); } }),
+    const SizedBox(height: 8),
+    DropdownButtonFormField<double>(value: cardRadius, decoration: const InputDecoration(labelText: '卡片圆角', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 8, child: Text('小')), DropdownMenuItem(value: 16, child: Text('中')), DropdownMenuItem(value: 24, child: Text('大'))], onChanged: (value) { if (value != null) { setState(() => cardRadius = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: value)); } }),
     const SizedBox(height: 16),
     Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
     Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),

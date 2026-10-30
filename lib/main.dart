@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'src/screens/home_shell.dart';
+import 'src/theme/theme_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,21 +13,17 @@ class QqBotCpApp extends StatefulWidget {
 }
 
 class _QqBotCpAppState extends State<QqBotCpApp> {
-  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeSettings _settings = const ThemeSettings();
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'QQ-bot-CP',
       debugShowCheckedModeBanner: false,
-      themeMode: _themeMode,
-      theme: ThemeData(brightness: Brightness.light, colorSchemeSeed: const Color(0xff536dfe), useMaterial3: true),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        colorSchemeSeed: const Color(0xff8290ff),
-        useMaterial3: true,
-      ),
-      home: HomeShell(onThemeChanged: (mode) => setState(() => _themeMode = mode)),
+      themeMode: _settings.mode,
+      theme: ThemeData(brightness: Brightness.light, colorSchemeSeed: _settings.seedColor, cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_settings.cardRadius))), useMaterial3: true),
+      darkTheme: ThemeData(brightness: Brightness.dark, colorSchemeSeed: _settings.seedColor, cardTheme: CardThemeData(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(_settings.cardRadius))), useMaterial3: true),
+      home: HomeShell(onThemeChanged: (settings) => setState(() => _settings = settings)),
     );
   }
 }
