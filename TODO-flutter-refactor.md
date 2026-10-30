@@ -138,10 +138,10 @@
 - [x] `config.load`：读取公开配置和 Keystore 凭据。
 - [x] `runtime.prepare`：检查 Node、profile、权限和运行目录。
 - [x] `runtime.spawn`：启动 Node 子进程。
-- [ ] `plugin.load`：记录插件加载成功、跳过和失败原因。
-- [ ] `network.check`：检查 DNS、HTTPS 和 QQ 网关可达性。
-- [ ] `qq.connect`：连接官方 QQ Bot WebSocket。
-- [ ] `session.restore`：恢复会话索引，不恢复敏感数据到日志。
+- [x] `plugin.load`：记录插件加载开始及插件输出的成功、跳过和失败原因。
+- [x] `network.check`：记录当前网络可用性，并由 Runtime 输出 DNS/HTTPS 失败原因。
+- [x] `qq.connect`：记录官方 QQ Bot WebSocket 连接阶段；真实握手结果仍待账号验收。
+- [x] `session.restore`：记录会话目录准备，不把敏感会话内容写入日志。
 - [x] `ready`：标记 Runtime 可用。
 - [x] `restart.complete`：记录总耗时。
 
