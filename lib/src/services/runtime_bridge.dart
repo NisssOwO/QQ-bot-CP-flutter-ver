@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/public_config.dart';
 import '../models/runtime_log.dart';
 import '../models/runtime_state.dart';
+import '../models/role_card.dart';
 
 class RuntimeBridge {
   static const _methods = MethodChannel('qq_bot_cp/runtime');
@@ -80,7 +81,10 @@ class RuntimeBridge {
   Future<Map<String, Object?>> exportBackup() async => await _methods.invokeMapMethod<String, Object?>('exportBackup') ?? {};
   Future<Map<String, Object?>> importBackup() async => await _methods.invokeMapMethod<String, Object?>('importBackup') ?? {};
   Future<Map<String, String>> defaultRole() async => (await _methods.invokeMapMethod<String, Object?>('getDefaultRole') ?? {}).map((key, value) => MapEntry(key, '$value'));
-  Future<void> saveDefaultRole({required String name, required String prompt}) => _methods.invokeMethod<void>('saveDefaultRole', {'name': name, 'prompt': prompt});
+  Future<void> saveDefaultRole({String id = '', required String name, required String prompt}) => _methods.invokeMethod<void>('saveDefaultRole', {'id': id, 'name': name, 'prompt': prompt});
+  Future<List<RoleCard>> roles() async => (await _methods.invokeListMethod<dynamic>('getRoles') ?? const []).whereType<Map>().map(RoleCard.fromMap).toList();
+  Future<void> saveRoleCard(RoleCard role) => _methods.invokeMethod<void>('saveRoleCard', role.toMap());
+  Future<void> deleteRoleCard(String id) => _methods.invokeMethod<void>('deleteRoleCard', {'id': id});
   Future<void> clearData(String kind) => _methods.invokeMethod<void>('clearData', {'kind': kind});
 }
 

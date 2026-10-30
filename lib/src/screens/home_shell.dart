@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/runtime_log.dart';
 import '../models/public_config.dart';
 import '../models/endpoint_test_result.dart';
 import '../models/runtime_state.dart';
+import '../models/role_card.dart';
 import '../services/runtime_bridge.dart';
 import '../services/public_ip_service.dart';
 import '../services/endpoint_test_service.dart';
@@ -445,25 +447,50 @@ class _RolePage extends StatefulWidget {
 }
 
 class _RolePageState extends State<_RolePage> {
+  final roleId = TextEditingController();
   final roleName = TextEditingController();
   final rolePrompt = TextEditingController();
+  final importJson = TextEditingController();
+  List<RoleCard> roles = const [];
+  String defaultId = '';
   bool loading = true;
   @override
   void initState() { super.initState(); _load(); }
   @override
-  void dispose() { roleName.dispose(); rolePrompt.dispose(); super.dispose(); }
-  Future<void> _load() async { final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); }
-  Future<void> _save() async { await widget.bridge.saveDefaultRole(name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('默认角色卡已保存'))); }
+  void dispose() { roleId.dispose(); roleName.dispose(); rolePrompt.dispose(); importJson.dispose(); super.dispose(); }
+  Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); }
+  void _newRole() { setState(() { roleId.text = 'custom.newrole'; roleName.clear(); rolePrompt.clear(); }); }
+  void _edit(RoleCard role) { if (role.builtin) return; setState(() { roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); }
+  Future<void> _save() async { try { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); await widget.bridge.saveRoleCard(role); await _load(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已保存'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$error'))); } }
+  Future<void> _setDefault() async { if (roleId.text.trim().isEmpty) return; await widget.bridge.saveDefaultRole(id: roleId.text.trim(), name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) setState(() => defaultId = roleId.text.trim()); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已设为默认角色'))); }
+  Future<void> _delete() async { final id = roleId.text.trim(); if (id.isEmpty) return; final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认删除角色？'), content: Text('将删除 $id，且无法恢复。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除'))])) ?? false; if (!ok) return; await widget.bridge.deleteRoleCard(id); _newRole(); await _load(); }
+  Future<void> _import() async { try { final decoded = jsonDecode(importJson.text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); importJson.clear(); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
+  void _export() { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); Clipboard.setData(ClipboardData(text: jsonEncode(role.toMap()))); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡 JSON 已复制'))); }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('角色管理', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8),
-    const Text('这里集中管理默认角色卡。聊天中的私聊/群聊角色切换仍由 Runtime 指令处理。', style: TextStyle(color: Colors.white60)),
+    const Text('参考旧项目角色卡格式：custom.xxx、显示名称和人格提示词。内置角色由 Runtime 提供并保持只读。', style: TextStyle(color: Colors.white60)),
     const SizedBox(height: 16),
-    TextField(controller: roleName, enabled: !loading, decoration: const InputDecoration(labelText: '默认角色名称', hintText: '例如：七草日花', border: OutlineInputBorder())),
+    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _newRole, icon: const Icon(Icons.add), label: const Text('新建角色'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.copy), label: const Text('导出 JSON')))]),
+    const SizedBox(height: 12),
+    if (roles.isEmpty) const Card(child: ListTile(leading: Icon(Icons.info_outline), title: Text('暂无自定义角色'), subtitle: Text('点击“新建角色”创建 custom.xxx 角色卡。'))),
+    ...roles.map((role) => Card(child: ListTile(title: Text(role.displayName), subtitle: Text('${role.id}${role.id == defaultId ? ' · 默认角色' : ''}'), trailing: IconButton(onPressed: () => _edit(role), icon: const Icon(Icons.edit))))),
+    const SizedBox(height: 16),
+    const Text('角色编辑', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8),
+    TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', hintText: 'custom.my-role', border: OutlineInputBorder())),
+    const SizedBox(height: 8),
+    TextField(controller: roleName, enabled: !loading, decoration: const InputDecoration(labelText: '显示名称', hintText: '例如：七草日花', border: OutlineInputBorder())),
     const SizedBox(height: 12),
     TextField(controller: rolePrompt, enabled: !loading, minLines: 10, maxLines: 20, decoration: const InputDecoration(labelText: '人格提示词', hintText: '填写默认角色的人格、语气、行为规则和边界', alignLabelWithHint: true, border: OutlineInputBorder())),
     const SizedBox(height: 12),
-    FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存默认角色卡')),
+    Row(children: [Expanded(child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存角色卡'))), const SizedBox(width: 8), IconButton(tooltip: '设为默认角色', onPressed: loading ? null : _setDefault, icon: Icon(defaultId == roleId.text ? Icons.star : Icons.star_border)), IconButton(tooltip: '删除角色', onPressed: loading ? null : _delete, icon: const Icon(Icons.delete_outline))]),
+    const SizedBox(height: 16),
+    const Text('导入角色卡 JSON', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 8),
+    TextField(controller: importJson, minLines: 4, maxLines: 8, decoration: const InputDecoration(hintText: '{"id":"custom.example","displayName":"示例","prompt":"你是……"}', border: OutlineInputBorder())),
+    const SizedBox(height: 8),
+    FilledButton.icon(onPressed: _import, icon: const Icon(Icons.file_download), label: const Text('导入并保存')),
   ]);
 }
