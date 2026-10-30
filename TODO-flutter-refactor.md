@@ -105,9 +105,9 @@
 ### P3.1 协议适配层
 
 - [x] 定义统一协议接口：模型列表、文本请求、流式响应、取消请求、错误归一化（Flutter/Runtime 契约已建立）。
-- [ ] 接入 OpenAI Chat Completions。
-- [ ] 接入 OpenAI Responses。
-- [ ] 接入 Anthropic Messages。
+- [x] 接入 OpenAI Chat Completions（DSH `relay` 路由）。
+- [x] 接入 OpenAI Responses（通过 `LLM_API` 选择 wire protocol）。
+- [x] 接入 Anthropic Messages（通过 `LLM_API` 选择 wire protocol）。
 - [ ] 保留自定义 OpenAI-compatible 接口。
 - [x] 每个协议提供能力声明：是否支持流式、视觉、工具调用、思考参数。
 - [x] 协议错误统一转换为可读错误码。

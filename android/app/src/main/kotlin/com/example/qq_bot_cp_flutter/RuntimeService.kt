@@ -100,11 +100,20 @@ class RuntimeService : Service() {
     private fun runtimeEnvironment(): Map<String, String> {
         val credentials = CredentialStore(this)
         val config = getSharedPreferences("public-config", MODE_PRIVATE)
+        val protocol = config.getString("protocol", "").orEmpty()
+        val api = when (protocol) {
+            "openai-responses" -> "openai-responses"
+            "anthropic-messages" -> "anthropic-messages"
+            else -> "openai-completions"
+        }
         return mapOf(
             "QQBOT_APPID" to credentials.read("qqbotAppId"),
             "QQBOT_SECRET" to credentials.read("qqbotSecret"),
             "LLM_API_KEY" to credentials.read("llmApiKey"),
-            "LLM_PROVIDER" to config.getString("protocol", "").orEmpty(),
+            // dsh-llm-pi-ai owns one configured route named relay; the wire
+            // protocol is selected independently so provider lookup remains stable.
+            "LLM_PROVIDER" to "relay",
+            "LLM_API" to api,
             "LLM_MODEL" to config.getString("model", "").orEmpty(),
             "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
         )
