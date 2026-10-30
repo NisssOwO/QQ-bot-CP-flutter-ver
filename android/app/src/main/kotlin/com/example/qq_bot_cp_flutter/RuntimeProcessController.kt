@@ -6,6 +6,8 @@ import java.io.File
 class RuntimeProcessController(private val context: Context) {
     private var process: Process? = null
 
+    @Synchronized fun isAlive(): Boolean = process?.isAlive == true
+
     @Synchronized fun start(environment: Map<String, String>) {
         if (process?.isAlive == true) return
         val root = File(context.filesDir, "runtime")
