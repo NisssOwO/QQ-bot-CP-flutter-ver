@@ -42,6 +42,12 @@ powershell -ExecutionPolicy Bypass -File .\tool\build-arm64-debug.ps1
 powershell -ExecutionPolicy Bypass -File .\tool\smoke-android16.ps1
 ```
 
+验证空角色列表和 `/presets` 行为：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\test-empty-role-preset.ps1
+```
+
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
 
 Runtime Bundle 不作为普通 Git 文件提交。准备干净 Runtime 时执行：
