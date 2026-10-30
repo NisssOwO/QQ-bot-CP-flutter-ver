@@ -24,7 +24,7 @@
 
 ### P0.1 建立 Flutter 工程
 
-- [ ] 创建 Flutter Android 工程和包名 `com.shinycolors.officialbot`。
+- [x] 创建 Flutter Android 工程和包名 `com.shinycolors.officialbot`；APK 已通过 aapt 验证应用 ID 和启动 Activity。
 - [ ] 固定 Flutter、Dart、Android Gradle Plugin、Gradle、JDK 版本。
 - [x] 建立 `lib/`、`android/`、`test/`、`tool/` 目录。`integration_test/` 尚未建立。
 - [ ] 配置 debug、release、arm64-v8a 构建变体。

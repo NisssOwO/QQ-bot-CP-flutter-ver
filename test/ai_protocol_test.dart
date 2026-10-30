@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qq_bot_cp_flutter/src/ai/ai_protocol.dart';
-import 'package:qq_bot_cp_flutter/src/ai/protocol_registry.dart';
+import 'package:qq_bot_cp/src/ai/ai_protocol.dart';
+import 'package:qq_bot_cp/src/ai/protocol_registry.dart';
 
 void main() {
   test('protocol registry exposes supported capabilities', () {
