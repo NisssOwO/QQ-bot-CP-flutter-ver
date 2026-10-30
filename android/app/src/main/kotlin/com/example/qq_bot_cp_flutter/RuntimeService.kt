@@ -25,6 +25,7 @@ class RuntimeService : Service() {
     private val reconnectHandler = Handler(Looper.getMainLooper())
     private var reconnectAttempt = 0
     private var reconnectScheduled = false
+    @Volatile private var bootstrapGeneration = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -39,27 +40,38 @@ class RuntimeService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         reconnectHandler.removeCallbacksAndMessages(null)
         reconnectScheduled = false
+        val generation = ++bootstrapGeneration
         Thread({
             val started = System.currentTimeMillis()
             val runId = UUID.randomUUID().toString().take(8)
             RuntimeEventBus.runId = runId
             getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("runId", runId).remove("runtimeLastError").apply()
+            if (!isCurrentGeneration(generation)) return@Thread
             update("starting", "restart.begin", "开始启动（runId=$runId）")
             try {
+                if (!isCurrentGeneration(generation)) return@Thread
                 update("starting", "process.stop", "确认旧 Runtime 已停止", System.currentTimeMillis() - started)
                 controller?.stop()
+                if (!isCurrentGeneration(generation)) return@Thread
                 update("starting", "runtime.prepare", "正在准备 Node/DSH 运行文件", System.currentTimeMillis() - started)
                 val root = RuntimeAssetInstaller.install(this)
+                if (!isCurrentGeneration(generation)) return@Thread
                 update("starting", "config.load", "读取公开配置和 Keystore 凭据（${root.name}）", System.currentTimeMillis() - started)
                 update("starting", "plugin.load", "正在加载 DSH profile 和 QQ/角色插件", System.currentTimeMillis() - started)
                 val configured = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("credentialsConfigured", false)
                 if (configured) {
+                    if (!isCurrentGeneration(generation)) return@Thread
                     val network = getSystemService(ConnectivityManager::class.java).activeNetwork
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("networkStatus", if (network == null) "离线" else "在线").apply()
                     update("starting", "network.check", if (network == null) "当前没有可用网络，Runtime 将等待重连" else "检测到可用网络，准备连接网关", System.currentTimeMillis() - started, if (network == null) "network_unavailable" else null)
                     update("starting", "runtime.spawn", "正在启动 Node/DSH 子进程", System.currentTimeMillis() - started)
+                    if (!isCurrentGeneration(generation)) return@Thread
                     controller = RuntimeProcessController(this)
                     controller?.start(runtimeEnvironment())
+                    if (!isCurrentGeneration(generation)) {
+                        controller?.stop()
+                        return@Thread
+                    }
                     reconnectAttempt = 0
                     update("starting", "qq.connect", "已启动 QQ Bot 连接流程，等待 WebSocket 握手", System.currentTimeMillis() - started)
                     update("starting", "session.restore", "正在准备会话目录（不会把会话内容写入日志）", System.currentTimeMillis() - started)
@@ -67,16 +79,17 @@ class RuntimeService : Service() {
                 } else {
                     update("online", "ready", "服务已就绪，等待在 Flutter 中填写凭据", System.currentTimeMillis() - started)
                 }
-                update("online", "restart.complete", "启动流程完成", System.currentTimeMillis() - started)
+                if (isCurrentGeneration(generation)) update("online", "restart.complete", "启动流程完成", System.currentTimeMillis() - started)
             } catch (error: Exception) {
-                update("failed", "restart.failed", "启动失败：${error.message ?: error}", System.currentTimeMillis() - started, "runtime_start_failed")
+                if (isCurrentGeneration(generation)) update("failed", "restart.failed", "启动失败：${error.message ?: error}", System.currentTimeMillis() - started, "runtime_start_failed")
             }
-            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("服务已就绪"))
+            if (isCurrentGeneration(generation)) getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("服务已就绪"))
         }, "runtime-bootstrap").start()
         return START_STICKY
     }
 
     override fun onDestroy() {
+        bootstrapGeneration++
         reconnectHandler.removeCallbacksAndMessages(null)
         reconnectScheduled = false
         networkCallback?.let { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) }
@@ -87,6 +100,8 @@ class RuntimeService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun isCurrentGeneration(generation: Long): Boolean = generation == bootstrapGeneration
 
     private fun update(status: String, phase: String, message: String, elapsedMs: Long = 0, errorCode: String? = null) {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
