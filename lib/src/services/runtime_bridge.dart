@@ -96,6 +96,8 @@ class RuntimeBridge {
   Future<Map<String, String>> appInfo() async => ((await _call<Map<dynamic, dynamic>>('getAppInfo', null, const Duration(seconds: 12), 2)) ?? {}).map((key, value) => MapEntry('$key', '$value'));
   Future<Map<String, Object?>> pickAndInstallApk() async => ((await _call<Map<dynamic, dynamic>>('pickAndInstallApk')) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<String> updateCachePath() async => await _call<String>('getUpdateCachePath') ?? '';
+  Future<String> updateEndpoint() async => await _call<String>('getUpdateEndpoint', null, const Duration(seconds: 12), 2) ?? '';
+  Future<void> saveUpdateEndpoint(String value) async { await _call<void>('saveUpdateEndpoint', value.trim()); }
   Future<Map<String, Object?>> verifyAndInstallUpdate({required String path, required String sha256}) async => ((await _call<Map<dynamic, dynamic>>('verifyAndInstallUpdate', {'path': path, 'sha256': sha256}, const Duration(minutes: 2))) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<Map<String, Object?>> exportBackup() async => ((await _call<Map<dynamic, dynamic>>('exportBackup')) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<Map<String, Object?>> importBackup() async => ((await _call<Map<dynamic, dynamic>>('importBackup', null, const Duration(seconds: 30))) ?? {}).map((key, value) => MapEntry('$key', value));
