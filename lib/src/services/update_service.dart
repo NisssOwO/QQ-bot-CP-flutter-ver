@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import '../models/update_manifest.dart';
+import 'background_tasks.dart';
 
 class UpdateService {
   const UpdateService();
@@ -14,7 +15,7 @@ class UpdateService {
       final response = await request.close().timeout(const Duration(seconds: 8));
       final body = await response.transform(utf8.decoder).join();
       if (response.statusCode != 200) throw HttpException('更新清单返回 HTTP ${response.statusCode}');
-      final decoded = jsonDecode(body);
+      final decoded = await decodeJsonInBackground(body);
       if (decoded is! Map<String, dynamic>) throw const FormatException('更新清单格式错误');
       return UpdateManifest.fromJson(decoded);
     } finally {
