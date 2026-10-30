@@ -26,6 +26,8 @@ class MainActivity : FlutterActivity() {
     private val apkPickerRequest = 1901
     private val backupExportRequest = 2001
     private val backupImportRequest = 2002
+    private val roleExportRequest = 2101
+    private val roleImportRequest = 2102
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -53,6 +55,8 @@ class MainActivity : FlutterActivity() {
                 "getRoles" -> result.success(roleCards())
                 "saveRoleCard" -> { saveRoleCard(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "deleteRoleCard" -> { deleteRoleCard(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "exportRoleCard" -> exportRoleCard(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
+                "importRoleCard" -> importRoleCard(result)
                 "clearData" -> { clearData(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 else -> result.notImplemented()
             }
@@ -247,6 +251,8 @@ class MainActivity : FlutterActivity() {
 
     private var pendingInstallResult: MethodChannel.Result? = null
     private var pendingBackupResult: MethodChannel.Result? = null
+    private var pendingRoleResult: MethodChannel.Result? = null
+    private var roleExportJson: String = ""
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -260,6 +266,18 @@ class MainActivity : FlutterActivity() {
             val result = pendingBackupResult; pendingBackupResult = null
             if (resultCode != RESULT_OK || data?.data == null) { result?.success(mapOf("status" to "cancelled")); return }
             try { val json = contentResolver.openInputStream(data.data!!)?.bufferedReader()?.use { it.readText() } ?: throw IllegalArgumentException("无法读取备份"); restoreBackup(JSONObject(json)); result?.success(mapOf("status" to "imported")) } catch (error: Exception) { result?.success(mapOf("status" to "rejected", "reason" to (error.message ?: "备份格式错误"))) }
+            return
+        }
+        if (requestCode == roleExportRequest) {
+            val result = pendingRoleResult; pendingRoleResult = null
+            if (resultCode != RESULT_OK || data?.data == null) { result?.success(mapOf("status" to "cancelled")); return }
+            try { contentResolver.openOutputStream(data.data!!)?.use { it.write(roleExportJson.toByteArray(Charsets.UTF_8)) }; result?.success(mapOf("status" to "exported")) } catch (error: Exception) { result?.error("ROLE_EXPORT_ERROR", error.message, null) }
+            return
+        }
+        if (requestCode == roleImportRequest) {
+            val result = pendingRoleResult; pendingRoleResult = null
+            if (resultCode != RESULT_OK || data?.data == null) { result?.success(null); return }
+            try { val text = contentResolver.openInputStream(data.data!!)?.bufferedReader()?.use { it.readText() } ?: throw IllegalArgumentException("无法读取角色卡"); result?.success(text) } catch (error: Exception) { result?.error("ROLE_IMPORT_ERROR", error.message, null) }
             return
         }
         if (requestCode != apkPickerRequest) return
@@ -297,6 +315,17 @@ class MainActivity : FlutterActivity() {
         createAutoBackup()
         pendingBackupResult = result
         startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "application/json" }, backupImportRequest)
+    }
+
+    private fun exportRoleCard(values: Map<*, *>, result: MethodChannel.Result) {
+        roleExportJson = values["json"] as? String ?: ""
+        pendingRoleResult = result
+        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply { type = "application/json"; putExtra(Intent.EXTRA_TITLE, "role-card.json") }, roleExportRequest)
+    }
+
+    private fun importRoleCard(result: MethodChannel.Result) {
+        pendingRoleResult = result
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "application/json" }, roleImportRequest)
     }
 
     private fun createAutoBackup() {
