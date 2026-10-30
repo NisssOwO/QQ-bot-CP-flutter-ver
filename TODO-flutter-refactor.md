@@ -78,6 +78,7 @@
 - [ ] JSON 解析、日志筛选、配置备份、哈希计算放入 Dart isolate。
   - [x] 角色卡文本和文件导入的 JSON 解析已移到 Dart 后台 isolate，并有单元测试。
   - [x] Runtime 日志级别和模块筛选已移到 Dart 后台 isolate，并有单元测试。
+  - [x] 在线更新清单的 JSON 解析已移到 Dart 后台 isolate。
 - [ ] APK 下载、文件复制、签名校验放入原生后台线程。
   - [x] 已将更新包 SHA-256、签名和版本校验放入 MainActivity 的单线程 IO executor；安装器调用回到 UI 线程。
 - [ ] AI 请求由 Node/DSH Runtime 负责，不在 Flutter UI 中直接请求。
