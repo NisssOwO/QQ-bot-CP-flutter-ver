@@ -116,7 +116,7 @@ class _HomeShellState extends State<HomeShell> {
       _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp)),
       _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
-      const _PlaceholderPage(title: '设置', message: '更新、后台运行、主题和小组件设置将在后续 P0/P1 阶段接入。'),
+      _SettingsPage(bridge: _bridge),
     ];
     return Scaffold(
       appBar: AppBar(title: const Text('QQ-bot-CP'), actions: [IconButton(onPressed: _refreshState, icon: const Icon(Icons.refresh))]),
@@ -318,4 +318,35 @@ class _PlaceholderPage extends StatelessWidget {
   Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('$title\n\n$message', textAlign: TextAlign.center)));
 }
 
+class _SettingsPage extends StatefulWidget {
+  const _SettingsPage({required this.bridge});
+  final RuntimeBridge bridge;
+  @override State<_SettingsPage> createState() => _SettingsPageState();
+}
 
+class _SettingsPageState extends State<_SettingsPage> {
+  Map<String, String> info = const {};
+  bool installing = false;
+  @override
+  void initState() { super.initState(); _load(); }
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); if (mounted) setState(() => info = value); }
+  Future<void> _install() async {
+    setState(() => installing = true);
+    final result = await widget.bridge.pickAndInstallApk();
+    if (!mounted) return;
+    setState(() => installing = false);
+    final status = result['status'];
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(status == 'permission_required' ? '请先允许本应用安装未知来源应用' : status == 'installer_opened' ? '已打开系统安装器' : status == 'cancelled' ? '已取消选择' : '更新操作：$status')));
+  }
+  @override
+  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
+    const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 16),
+    Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
+    Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),
+    const SizedBox(height: 8),
+    FilledButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile), label: const Text('从本地 APK 更新')),
+    const SizedBox(height: 8),
+    const Text('更新会交给 Android 系统安装器处理，应用不会绕过系统确认。', style: TextStyle(color: Colors.white60)),
+  ]);
+}

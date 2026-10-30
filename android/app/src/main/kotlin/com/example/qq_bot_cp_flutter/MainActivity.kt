@@ -9,10 +9,13 @@ import android.os.Build
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import android.provider.Settings
+import android.net.Uri
 
 class MainActivity : FlutterActivity() {
     private val methodChannel = "qq_bot_cp/runtime"
     private val eventChannel = "qq_bot_cp/runtime_events"
+    private val apkPickerRequest = 1901
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,6 +30,8 @@ class MainActivity : FlutterActivity() {
                 "getConfigHistory" -> result.success(configHistory())
                 "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
                 "testQqConnection" -> testQqConnection(result)
+                "getAppInfo" -> result.success(appInfo())
+                "pickAndInstallApk" -> pickAndInstallApk(result)
                 else -> result.notImplemented()
             }
         }
@@ -132,5 +137,46 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.success(mapOf("configured" to true, "stage" to "network", "message" to "官方网关不可达：${error.message ?: error}")) }
             }
         }.start()
+    }
+
+    private fun appInfo(): Map<String, String> {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        return mapOf("versionName" to (info.versionName ?: "未知"), "versionCode" to info.longVersionCode.toString(), "abi" to (Build.SUPPORTED_ABIS.firstOrNull() ?: "未知"))
+    }
+
+    private fun pickAndInstallApk(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            result.success(mapOf("status" to "permission_required"))
+            return
+        }
+        pendingInstallResult = result
+        startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/vnd.android.package-archive"
+        }, apkPickerRequest)
+    }
+
+    private var pendingInstallResult: MethodChannel.Result? = null
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != apkPickerRequest) return
+        val result = pendingInstallResult
+        pendingInstallResult = null
+        val uri = data?.data
+        if (resultCode != RESULT_OK || uri == null) {
+            result?.success(mapOf("status" to "cancelled"))
+            return
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            })
+            result?.success(mapOf("status" to "installer_opened"))
+        } catch (error: Exception) {
+            result?.error("INSTALLER_ERROR", error.message, null)
+        }
     }
 }
