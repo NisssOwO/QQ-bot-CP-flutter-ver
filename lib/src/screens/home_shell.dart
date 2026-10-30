@@ -56,6 +56,17 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _restart() async {
     try {
+      final config = await _bridge.config();
+      final missing = <String>[];
+      if (!config.qqConfigured || config.appId.trim().isEmpty) missing.add('QQ AppID / AppSecret');
+      if (!config.llmConfigured) missing.add('AI API Key');
+      if (config.protocol.trim().isEmpty) missing.add('接口类型');
+      if (config.model.trim().isEmpty) missing.add('模型名称');
+      if (config.baseUrl.trim().isEmpty) missing.add('Base URL');
+      if (missing.isNotEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('尚未启动：请先填写 ${missing.join('、')}')));
+        return;
+      }
       await _bridge.restart();
       await _refreshState();
     } catch (error) {
@@ -166,15 +177,27 @@ class _IpLine extends StatelessWidget {
   }
 }
 
-class _LogPage extends StatelessWidget {
+class _LogPage extends StatefulWidget {
   const _LogPage({required this.logs});
   final List<RuntimeLogEntry> logs;
+  @override State<_LogPage> createState() => _LogPageState();
+}
+
+class _LogPageState extends State<_LogPage> {
+  LogLevel? level;
+  String module = '';
   @override
-  Widget build(BuildContext context) => ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: logs.isEmpty ? 1 : logs.length,
-        itemBuilder: (_, index) => logs.isEmpty ? const ListTile(title: Text('暂无 Runtime 日志')) : ListTile(title: Text(logs[index].message), subtitle: Text('${logs[index].level.name} · ${logs[index].module}')),
-      );
+  Widget build(BuildContext context) {
+    final filtered = widget.logs.where((entry) => (level == null || entry.level == level) && (module.trim().isEmpty || entry.module.toLowerCase().contains(module.trim().toLowerCase()))).toList().reversed.toList();
+    return Column(children: [
+      Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 4), child: Row(children: [
+        Expanded(child: DropdownButtonFormField<LogLevel?>(value: level, decoration: const InputDecoration(labelText: '级别', border: OutlineInputBorder()), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) => setState(() => level = value))),
+        const SizedBox(width: 8),
+        Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) => setState(() => module = value))),
+      ])),
+      Expanded(child: filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; return ListTile(title: Text(entry.message), subtitle: Text('${entry.level.name} · ${entry.module}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}')); })),
+    ]);
+  }
 }
 
 class _ConfigPage extends StatefulWidget {
