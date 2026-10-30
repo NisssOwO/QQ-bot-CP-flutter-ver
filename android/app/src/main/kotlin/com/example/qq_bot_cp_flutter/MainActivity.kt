@@ -50,6 +50,7 @@ class MainActivity : FlutterActivity() {
                 "importBackup" -> importBackup(result)
                 "getDefaultRole" -> result.success(defaultRole())
                 "saveDefaultRole" -> { saveDefaultRole(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "clearData" -> { clearData(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 else -> result.notImplemented()
             }
         }
@@ -179,6 +180,21 @@ class MainActivity : FlutterActivity() {
 
     private fun saveDefaultRole(values: Map<*, *>) {
         getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("name", values["name"] as? String ?: "").putString("prompt", values["prompt"] as? String ?: "").apply()
+    }
+
+    private fun clearData(values: Map<*, *>) {
+        when (values["kind"] as? String) {
+            "logs" -> getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().remove("runtimeLastOutput").remove("runtimeLastError").apply()
+            "sessions" -> File(filesDir, "runtime/.dsh-home/sessions").deleteRecursively()
+            "all" -> {
+                CredentialStore(this).clear()
+                getSharedPreferences("public-config", MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences("theme", MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences("public-config-history", MODE_PRIVATE).edit().clear().apply()
+                getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("credentialsConfigured", false).remove("runtimeLastOutput").remove("runtimeLastError").apply()
+            }
+        }
     }
 
     private fun appInfo(): Map<String, String> {
