@@ -241,6 +241,31 @@ class _LogPage extends StatefulWidget {
 class _LogPageState extends State<_LogPage> {
   LogLevel? level;
   String module = '';
+  List<RuntimeLogEntry> filtered = const [];
+  bool filtering = false;
+  @override
+  void initState() {
+    super.initState();
+    _applyFilter();
+  }
+  @override
+  void didUpdateWidget(covariant _LogPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _applyFilter();
+  }
+  Future<void> _applyFilter() async {
+    if (mounted) setState(() => filtering = true);
+    final snapshot = List<RuntimeLogEntry>.from(widget.logs);
+    final indexes = await filterLogIndexesInBackground(snapshot.map((entry) => <String, Object?>{
+      'level': entry.level.name,
+      'module': entry.module,
+    }).toList(), level?.name, module);
+    if (!mounted) return;
+    setState(() {
+      filtered = indexes.map((index) => snapshot[index]).toList().reversed.toList();
+      filtering = false;
+    });
+  }
   String _redacted(String value) => value
       .replaceAll(RegExp(r'(bearer\s+|api[_-]?key\s*[:=]\s*|app[_-]?secret\s*[:=]\s*|authorization\s*[:=]\s*|secret\s*[:=]\s*|token\s*[:=]\s*)[^\s,;]+', caseSensitive: false), r'\1[REDACTED]')
       .replaceAll(RegExp(r'("(?:api[_-]?key|app[_-]?secret|token|authorization|bearer)"\s*:\s*")[^"]*(")', caseSensitive: false), r'\1[REDACTED]\2');
@@ -251,15 +276,14 @@ class _LogPageState extends State<_LogPage> {
   }
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.logs.where((entry) => (level == null || entry.level == level) && (module.trim().isEmpty || entry.module.toLowerCase().contains(module.trim().toLowerCase()))).toList().reversed.toList();
     return Column(children: [
       Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 4), child: Row(children: [
-        Expanded(child: DropdownButtonFormField<LogLevel?>(value: level, decoration: const InputDecoration(labelText: '级别', border: OutlineInputBorder()), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) => setState(() => level = value))),
+        Expanded(child: DropdownButtonFormField<LogLevel?>(value: level, decoration: const InputDecoration(labelText: '级别', border: OutlineInputBorder()), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) { setState(() => level = value); _applyFilter(); })),
         const SizedBox(width: 8),
-        Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) => setState(() => module = value))),
+        Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) { module = value; _applyFilter(); })),
         IconButton(tooltip: '复制脱敏日志', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
       ])),
-      Expanded(child: filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; return ListTile(title: Text(entry.message), subtitle: Text('${entry.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}')); })),
+      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; return ListTile(title: Text(entry.message), subtitle: Text('${entry.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}')); })),
     ]);
   }
 }

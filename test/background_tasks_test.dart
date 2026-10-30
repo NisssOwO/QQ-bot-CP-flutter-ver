@@ -8,4 +8,13 @@ void main() {
     expect(value, isA<Map>());
     expect((value as Map)['id'], 'custom.demo');
   });
+
+  test('filters log indexes in a background isolate', () async {
+    final indexes = await filterLogIndexesInBackground([
+      {'level': 'info', 'module': 'network'},
+      {'level': 'error', 'module': 'qq'},
+      {'level': 'error', 'module': 'network'},
+    ], 'error', 'network');
+    expect(indexes, [2]);
+  });
 }
