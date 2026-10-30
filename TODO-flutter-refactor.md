@@ -83,6 +83,7 @@
   - [x] 已将更新包 SHA-256、签名和版本校验放入 MainActivity 的单线程 IO executor；安装器调用回到 UI 线程。
 - [ ] AI 请求由 Node/DSH Runtime 负责，不在 Flutter UI 中直接请求。
 - [ ] 增加主线程卡顿和长任务检测。
+  - [x] Debug/Profile 构建启用 32ms 帧耗时监测，记录 build/raster 时长；Release 构建不启用调试监测。
 
 ## P2：公网 IP 展示
 
