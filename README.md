@@ -22,3 +22,10 @@ flutter analyze
 flutter test
 flutter build apk --debug --target-platform android-arm64
 ```
+
+## Runtime Bundle
+
+Runtime 二进制不提交到 Git。构建前使用：
+
+powershell -ExecutionPolicy Bypass -File .\tool\prepare-runtime-bundle.ps1 -SourceRuntime <干净 Runtime 目录>
+
