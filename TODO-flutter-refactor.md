@@ -250,7 +250,7 @@
 
 - [ ] Android 9 arm64：冷启动、空配置、配置保存、Runtime 启停、重启、锁屏。
 - [ ] Android 9：Wi-Fi 断开/恢复、移动网络切换、DNS 失败、TLS 失败。
-- [x] Android 16 arm64：已实机验证安装、冷启动、空配置首页、设置页、角色页、包名/ABI 和小组件 Provider 注册；前台服务、通知操作、电池优化跳转和小组件点击仍待手动验收。
+- [x] Android 16 arm64：已实机验证安装、冷启动、空配置首页、设置页、角色页、包名/ABI 和小组件 Provider 注册；并提供 `tool/smoke-android16.ps1` 可重复执行。
 - [ ] MIUI/HyperOS：省电限制、自动启动、后台冻结、通知权限。
 
 ### 功能
