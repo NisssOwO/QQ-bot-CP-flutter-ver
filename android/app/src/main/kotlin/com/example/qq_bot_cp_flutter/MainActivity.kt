@@ -190,8 +190,18 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun roleCards(): List<Map<String, Any>> {
+        val result = mutableListOf<Map<String, Any>>()
+        val presets = File(filesDir, "runtime/presets")
+        presets.listFiles()?.filter { it.name.startsWith("preset.") && it.name.endsWith(".json") }?.forEach { file ->
+            try {
+                val metadata = org.json.JSONObject(file.readText())
+                val id = metadata.optString("id", file.name.removePrefix("preset.").removeSuffix(".json"))
+                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to "", "builtin" to true)
+            } catch (_: Exception) { }
+        }
         val array = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
-        return (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; mapOf("id" to item.optString("id"), "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt"), "builtin" to false) }
+        result += (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; mapOf("id" to item.optString("id"), "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt"), "builtin" to false) }
+        return result
     }
 
     private fun saveRoleCard(values: Map<*, *>) {
