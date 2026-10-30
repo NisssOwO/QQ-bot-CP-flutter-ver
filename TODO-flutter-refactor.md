@@ -126,7 +126,7 @@
 
 - [x] AppSecret、API Key 使用 Keystore 加密。
 - [x] 配置导出默认脱敏，不导出密钥（备份 JSON 只包含公开配置、主题和角色数据）。
-- [ ] 日志过滤 `Bearer`、`API_KEY`、`SECRET`、Token 和请求体。
+- [x] 日志过滤 `Bearer`、`API_KEY`、`APP_SECRET`、Token、Authorization 及常见 JSON 密钥字段；Runtime 输出和复制导出分别脱敏。
 - [x] 清除全部配置时明确提示凭据会被删除；卸载行为仍由 Android 系统处理。
 
 ## P4：重启流程和精准日志
