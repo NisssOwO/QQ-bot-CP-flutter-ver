@@ -37,6 +37,7 @@ class MainActivity : FlutterActivity() {
                 "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
                 "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); stopService(Intent(this, RuntimeService::class.java)); startRuntimeService(); result.success(null) }
                 "getRuntimeState" -> result.success(runtimeState())
+                "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "getConfigHistory" -> result.success(configHistory())
@@ -66,7 +67,7 @@ class MainActivity : FlutterActivity() {
             }
         }
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, eventChannel).setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { RuntimeEventBus.attach(events) }
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { RuntimeEventBus.attach(this@MainActivity, events) }
             override fun onCancel(arguments: Any?) { RuntimeEventBus.attach(null) }
         })
     }
