@@ -13,6 +13,9 @@ import java.net.URL
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import android.provider.Settings
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -234,8 +237,17 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun importBackup(result: MethodChannel.Result) {
+        createAutoBackup()
         pendingBackupResult = result
         startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "application/json" }, backupImportRequest)
+    }
+
+    private fun createAutoBackup() {
+        val directory = File(filesDir, "backups")
+        directory.mkdirs()
+        val name = "auto-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".json"
+        File(directory, name).writeText(backupJson().toString(), Charsets.UTF_8)
+        directory.listFiles()?.sortedByDescending { it.lastModified() }?.drop(5)?.forEach { it.delete() }
     }
 
     private fun backupJson(): JSONObject {
