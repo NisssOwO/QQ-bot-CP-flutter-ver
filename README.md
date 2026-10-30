@@ -54,6 +54,12 @@ powershell -ExecutionPolicy Bypass -File .\tool\test-empty-role-preset.ps1
 powershell -ExecutionPolicy Bypass -File .\tool\test-official-session-isolation.ps1
 ```
 
+执行全部离线 Runtime 回归测试：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\test-runtime-suite.ps1
+```
+
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
 
 Runtime Bundle 不作为普通 Git 文件提交。准备干净 Runtime 时执行：
