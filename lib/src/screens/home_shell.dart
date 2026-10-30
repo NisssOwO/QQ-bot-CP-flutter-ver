@@ -12,7 +12,8 @@ import '../models/update_manifest.dart';
 import '../services/update_service.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  const HomeShell({super.key, this.onThemeChanged});
+  final ValueChanged<ThemeMode>? onThemeChanged;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -118,7 +119,7 @@ class _HomeShellState extends State<HomeShell> {
       _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp)),
       _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
-      _SettingsPage(bridge: _bridge),
+      _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
     return Scaffold(
       appBar: AppBar(title: const Text('QQ-bot-CP'), actions: [IconButton(onPressed: _refreshState, icon: const Icon(Icons.refresh))]),
@@ -321,8 +322,9 @@ class _PlaceholderPage extends StatelessWidget {
 }
 
 class _SettingsPage extends StatefulWidget {
-  const _SettingsPage({required this.bridge});
+  const _SettingsPage({required this.bridge, this.onThemeChanged});
   final RuntimeBridge bridge;
+  final ValueChanged<ThemeMode>? onThemeChanged;
   @override State<_SettingsPage> createState() => _SettingsPageState();
 }
 
@@ -331,6 +333,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   bool installing = false;
   final updateUrl = TextEditingController();
   UpdateManifest? manifest;
+  ThemeMode themeMode = ThemeMode.dark;
   bool checkingUpdate = false;
   bool downloading = false;
   double downloadProgress = 0;
@@ -380,6 +383,8 @@ class _SettingsPageState extends State<_SettingsPage> {
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+    const SizedBox(height: 12),
+    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); widget.onThemeChanged?.call(value); } }),
     const SizedBox(height: 16),
     Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
     Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),
