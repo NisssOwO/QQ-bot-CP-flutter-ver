@@ -50,6 +50,9 @@ class MainActivity : FlutterActivity() {
                 "importBackup" -> importBackup(result)
                 "getDefaultRole" -> result.success(defaultRole())
                 "saveDefaultRole" -> { saveDefaultRole(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "getRoles" -> result.success(roleCards())
+                "saveRoleCard" -> { saveRoleCard(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "deleteRoleCard" -> { deleteRoleCard(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "clearData" -> { clearData(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 else -> result.notImplemented()
             }
@@ -175,11 +178,38 @@ class MainActivity : FlutterActivity() {
 
     private fun defaultRole(): Map<String, String> {
         val prefs = getSharedPreferences("default-role", MODE_PRIVATE)
-        return mapOf("name" to prefs.getString("name", "") .orEmpty(), "prompt" to prefs.getString("prompt", "").orEmpty())
+        return mapOf("id" to prefs.getString("id", "").orEmpty(), "name" to prefs.getString("name", "").orEmpty(), "prompt" to prefs.getString("prompt", "").orEmpty())
     }
 
     private fun saveDefaultRole(values: Map<*, *>) {
-        getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("name", values["name"] as? String ?: "").putString("prompt", values["prompt"] as? String ?: "").apply()
+        getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("id", values["id"] as? String ?: "").putString("name", values["name"] as? String ?: "").putString("prompt", values["prompt"] as? String ?: "").apply()
+    }
+
+    private fun roleCards(): List<Map<String, Any>> {
+        val array = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        return (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; mapOf("id" to item.optString("id"), "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt"), "builtin" to false) }
+    }
+
+    private fun saveRoleCard(values: Map<*, *>) {
+        val id = (values["id"] as? String ?: "").trim()
+        val name = (values["displayName"] as? String ?: "").trim()
+        val prompt = values["prompt"] as? String ?: ""
+        require(Regex("custom\\.[a-z0-9][a-z0-9._-]{0,48}").matches(id)) { "角色 ID 必须是 custom.xxx" }
+        require(name.isNotEmpty() && prompt.trim().isNotEmpty()) { "角色名称和提示词不能为空" }
+        val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        val next = org.json.JSONArray(); var replaced = false
+        for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") == id) { next.put(org.json.JSONObject().put("id", id).put("displayName", name).put("prompt", prompt)); replaced = true } else next.put(item) }
+        if (!replaced) next.put(org.json.JSONObject().put("id", id).put("displayName", name).put("prompt", prompt))
+        getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", next.toString()).apply()
+    }
+
+    private fun deleteRoleCard(values: Map<*, *>) {
+        val id = values["id"] as? String ?: return
+        val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        val next = org.json.JSONArray()
+        for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") != id) next.put(item) }
+        getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", next.toString()).apply()
+        if (getSharedPreferences("default-role", MODE_PRIVATE).getString("id", "") == id) getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
     }
 
     private fun clearData(values: Map<*, *>) {
@@ -281,7 +311,8 @@ class MainActivity : FlutterActivity() {
         val config = getSharedPreferences("public-config", MODE_PRIVATE)
         val theme = getSharedPreferences("theme", MODE_PRIVATE)
         val role = getSharedPreferences("default-role", MODE_PRIVATE)
-        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("name", role.getString("name", "")).put("prompt", role.getString("prompt", "")))
+        val cards = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("id", role.getString("id", "")).put("name", role.getString("name", "")).put("prompt", role.getString("prompt", ""))).put("roleCards", cards)
     }
 
     private fun restoreBackup(json: JSONObject) {
@@ -291,7 +322,8 @@ class MainActivity : FlutterActivity() {
         val theme = json.optJSONObject("theme") ?: JSONObject()
         getSharedPreferences("theme", MODE_PRIVATE).edit().putString("mode", theme.optString("mode", "dark")).putInt("seedColor", theme.optInt("seedColor", 0xff8290ff.toInt())).putFloat("cardRadius", theme.optDouble("cardRadius", 16.0).toFloat()).putFloat("cardOpacity", theme.optDouble("cardOpacity", 1.0).toFloat()).putBoolean("tintedBackground", theme.optBoolean("tintedBackground", false)).apply()
         val role = json.optJSONObject("defaultRole") ?: JSONObject()
-        getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("name", role.optString("name", "")).putString("prompt", role.optString("prompt", "")).apply()
+        getSharedPreferences("default-role", MODE_PRIVATE).edit().putString("id", role.optString("id", "")).putString("name", role.optString("name", "")).putString("prompt", role.optString("prompt", "")).apply()
+        getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", (json.optJSONArray("roleCards") ?: org.json.JSONArray()).toString()).apply()
     }
 
     private fun validateApk(file: File): Map<String, String> {
