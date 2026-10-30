@@ -85,6 +85,8 @@ class RuntimeBridge {
   Future<List<RoleCard>> roles() async => (await _methods.invokeListMethod<dynamic>('getRoles') ?? const []).whereType<Map>().map(RoleCard.fromMap).toList();
   Future<void> saveRoleCard(RoleCard role) => _methods.invokeMethod<void>('saveRoleCard', role.toMap());
   Future<void> deleteRoleCard(String id) => _methods.invokeMethod<void>('deleteRoleCard', {'id': id});
+  Future<Map<String, Object?>> exportRoleCard(String json) async => await _methods.invokeMapMethod<String, Object?>('exportRoleCard', {'json': json}) ?? {};
+  Future<String?> importRoleCard() async => await _methods.invokeMethod<String>('importRoleCard');
   Future<void> clearData(String kind) => _methods.invokeMethod<void>('clearData', {'kind': kind});
 }
 

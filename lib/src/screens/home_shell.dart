@@ -465,14 +465,15 @@ class _RolePageState extends State<_RolePage> {
   Future<void> _setDefault() async { if (roleId.text.trim().isEmpty) return; await widget.bridge.saveDefaultRole(id: roleId.text.trim(), name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) setState(() => defaultId = roleId.text.trim()); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已设为默认角色'))); }
   Future<void> _delete() async { final id = roleId.text.trim(); if (id.isEmpty) return; final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认删除角色？'), content: Text('将删除 $id，且无法恢复。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除'))])) ?? false; if (!ok) return; await widget.bridge.deleteRoleCard(id); _newRole(); await _load(); }
   Future<void> _import() async { try { final decoded = jsonDecode(importJson.text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); importJson.clear(); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
-  void _export() { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); Clipboard.setData(ClipboardData(text: jsonEncode(role.toMap()))); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡 JSON 已复制'))); }
+  Future<void> _export() async { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); final result = await widget.bridge.exportRoleCard(jsonEncode(role.toMap())); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '角色卡已导出' : '导出操作：${result['status']}'))); }
+  Future<void> _importFile() async { try { final text = await widget.bridge.importRoleCard(); if (text == null) return; final decoded = jsonDecode(text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡文件已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('角色管理', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8),
     const Text('参考旧项目角色卡格式：custom.xxx、显示名称和人格提示词。内置角色由 Runtime 提供并保持只读。', style: TextStyle(color: Colors.white60)),
     const SizedBox(height: 16),
-    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _newRole, icon: const Icon(Icons.add), label: const Text('新建角色'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.copy), label: const Text('导出 JSON')))]),
+    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _newRole, icon: const Icon(Icons.add), label: const Text('新建角色'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload_file), label: const Text('导出 JSON')))]),
     const SizedBox(height: 12),
     if (roles.isEmpty) const Card(child: ListTile(leading: Icon(Icons.info_outline), title: Text('暂无自定义角色'), subtitle: Text('点击“新建角色”创建 custom.xxx 角色卡。'))),
     ...roles.map((role) => Card(child: ListTile(title: Text(role.displayName), subtitle: Text('${role.id}${role.id == defaultId ? ' · 默认角色' : ''}'), trailing: IconButton(onPressed: () => _edit(role), icon: const Icon(Icons.edit))))),
@@ -491,6 +492,6 @@ class _RolePageState extends State<_RolePage> {
     const SizedBox(height: 8),
     TextField(controller: importJson, minLines: 4, maxLines: 8, decoration: const InputDecoration(hintText: '{"id":"custom.example","displayName":"示例","prompt":"你是……"}', border: OutlineInputBorder())),
     const SizedBox(height: 8),
-    FilledButton.icon(onPressed: _import, icon: const Icon(Icons.file_download), label: const Text('导入并保存')),
+    Row(children: [Expanded(child: FilledButton.icon(onPressed: _importFile, icon: const Icon(Icons.file_open), label: const Text('选择 JSON 文件'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _import, icon: const Icon(Icons.paste), label: const Text('粘贴 JSON')))]),
   ]);
 }
