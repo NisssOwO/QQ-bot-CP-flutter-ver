@@ -337,6 +337,8 @@ class _SettingsPageState extends State<_SettingsPage> {
   ThemeMode themeMode = ThemeMode.dark;
   Color seedColor = const Color(0xff8290ff);
   double cardRadius = 16;
+  double cardOpacity = 1;
+  bool tintedBackground = false;
   bool checkingUpdate = false;
   bool downloading = false;
   double downloadProgress = 0;
@@ -387,11 +389,14 @@ class _SettingsPageState extends State<_SettingsPage> {
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 12),
-    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); widget.onThemeChanged?.call(ThemeSettings(mode: value, seedColor: seedColor, cardRadius: cardRadius)); } }),
+    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); widget.onThemeChanged?.call(ThemeSettings(mode: value, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground)); } }),
     const SizedBox(height: 8),
-    DropdownButtonFormField<Color>(value: seedColor, decoration: const InputDecoration(labelText: '主色', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: Color(0xff8290ff), child: Text('靛蓝')), DropdownMenuItem(value: Color(0xff4dd0e1), child: Text('青色')), DropdownMenuItem(value: Color(0xffff8a65), child: Text('珊瑚橙')), DropdownMenuItem(value: Color(0xffce93d8), child: Text('紫色'))], onChanged: (value) { if (value != null) { setState(() => seedColor = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: value, cardRadius: cardRadius)); } }),
+    DropdownButtonFormField<Color>(value: seedColor, decoration: const InputDecoration(labelText: '主色', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: Color(0xff8290ff), child: Text('靛蓝')), DropdownMenuItem(value: Color(0xff4dd0e1), child: Text('青色')), DropdownMenuItem(value: Color(0xffff8a65), child: Text('珊瑚橙')), DropdownMenuItem(value: Color(0xffce93d8), child: Text('紫色'))], onChanged: (value) { if (value != null) { setState(() => seedColor = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: value, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground)); } }),
     const SizedBox(height: 8),
-    DropdownButtonFormField<double>(value: cardRadius, decoration: const InputDecoration(labelText: '卡片圆角', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 8, child: Text('小')), DropdownMenuItem(value: 16, child: Text('中')), DropdownMenuItem(value: 24, child: Text('大'))], onChanged: (value) { if (value != null) { setState(() => cardRadius = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: value)); } }),
+    DropdownButtonFormField<double>(value: cardRadius, decoration: const InputDecoration(labelText: '卡片圆角', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 8, child: Text('小')), DropdownMenuItem(value: 16, child: Text('中')), DropdownMenuItem(value: 24, child: Text('大'))], onChanged: (value) { if (value != null) { setState(() => cardRadius = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: value, cardOpacity: cardOpacity, tintedBackground: tintedBackground)); } }),
+    const SizedBox(height: 8),
+    DropdownButtonFormField<double>(value: cardOpacity, decoration: const InputDecoration(labelText: '卡片透明度', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 0.7, child: Text('高透明')), DropdownMenuItem(value: 0.85, child: Text('半透明')), DropdownMenuItem(value: 1.0, child: Text('不透明'))], onChanged: (value) { if (value != null) { setState(() => cardOpacity = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: value, tintedBackground: tintedBackground)); } }),
+    SwitchListTile(title: const Text('柔和背景'), subtitle: const Text('使用轻微着色背景'), value: tintedBackground, onChanged: (value) { setState(() => tintedBackground = value); widget.onThemeChanged?.call(ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: value)); }),
     const SizedBox(height: 16),
     Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
     Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),
