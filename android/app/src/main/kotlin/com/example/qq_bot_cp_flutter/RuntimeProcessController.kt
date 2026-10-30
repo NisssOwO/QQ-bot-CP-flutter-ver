@@ -35,6 +35,8 @@ class RuntimeProcessController(private val context: Context) {
             val previous = prefs.getString(key, "") ?: ""
             val next = (if (previous.isEmpty()) line else "$previous\n$line").takeLast(8192)
             prefs.edit().putString(key, next).apply()
+            val level = if (key == "runtimeLastError") "error" else "info"
+            RuntimeEventBus.emit(level, "node", line)
         } }
     }
 
