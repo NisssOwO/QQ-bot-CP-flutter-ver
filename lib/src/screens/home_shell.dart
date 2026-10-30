@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/runtime_log.dart';
 import '../models/public_config.dart';
+import '../models/endpoint_test_result.dart';
 import '../models/runtime_state.dart';
 import '../services/runtime_bridge.dart';
 import '../services/public_ip_service.dart';
+import '../services/endpoint_test_service.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -218,6 +220,8 @@ class _ConfigPageState extends State<_ConfigPage> {
   bool loading = true;
   List<AiConfigHistory> history = const [];
   int? selectedHistory;
+  EndpointTestResult? endpointTest;
+  bool testingEndpoint = false;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -242,6 +246,12 @@ class _ConfigPageState extends State<_ConfigPage> {
     if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
   }
+
+  Future<void> _testEndpoint() async {
+    setState(() => testingEndpoint = true);
+    final result = await const EndpointTestService().test(baseUrl.text);
+    if (mounted) setState(() { testingEndpoint = false; endpointTest = result; });
+  }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -253,7 +263,10 @@ class _ConfigPageState extends State<_ConfigPage> {
     DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
     const SizedBox(height: 12),
     _field(model, '模型名称', '留空，填写后才会调用模型'),
-    _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写'),
+    _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写', onChanged: (_) => setState(() {})),
+    Row(children: [Expanded(child: FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')))]),
+    if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? Colors.greenAccent : Colors.orangeAccent))),
+    const SizedBox(height: 12),
     _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
     _field(secret, 'QQ AppSecret', '已保存时留空表示不修改', obscure: true),
     _field(apiKey, 'AI API Key', '已保存时留空表示不修改', obscure: true),
@@ -269,7 +282,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     if (mounted) setState(() { history = const []; selectedHistory = null; });
   }
 
-  Widget _field(TextEditingController c, String label, String hint, {bool obscure = false}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
+  Widget _field(TextEditingController c, String label, String hint, {bool obscure = false, ValueChanged<String>? onChanged}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, onChanged: onChanged, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
 }
 
 class _PlaceholderPage extends StatelessWidget {
