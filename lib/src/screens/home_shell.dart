@@ -162,6 +162,12 @@ class _OverviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
         Card(child: ListTile(leading: const Icon(Icons.circle, color: Colors.orange), title: Text(_statusLabel(state.status)), subtitle: Text(state.phase), trailing: Text('${state.elapsedMs} ms'))),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
+          Chip(avatar: const Icon(Icons.chat, size: 16), label: Text('QQ：${state.qqStatus}')),
+          Chip(avatar: const Icon(Icons.auto_awesome, size: 16), label: Text('AI：${state.aiStatus}')),
+          Chip(avatar: const Icon(Icons.wifi, size: 16), label: Text('网络：${state.networkStatus}')),
+          if (state.reconnectAttempts > 0) Chip(label: Text('第 ${state.reconnectAttempts} 次重连 · ${state.nextRetryMs ~/ 1000}s')),
+        ]))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [const Expanded(child: Text('设备公网 IP', style: TextStyle(fontWeight: FontWeight.bold))), IconButton(tooltip: hideIp ? '显示 IP' : '隐藏 IP', onPressed: onToggleHideIp, icon: Icon(hideIp ? Icons.visibility_off : Icons.visibility)), loadingIp ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : IconButton(tooltip: '刷新', onPressed: onRefreshIp, icon: const Icon(Icons.refresh))]),
           _IpLine(label: 'IPv4', value: publicIp, hidden: hideIp, onCopy: onCopyIp),

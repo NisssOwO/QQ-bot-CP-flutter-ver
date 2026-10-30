@@ -58,6 +58,19 @@ class RuntimeProcessController(private val context: Context) {
                 lower.contains("connection error") -> "transport_error"
                 else -> null
             }
+            when (module) {
+                "qq" -> prefs.edit().putString("qqStatus", when {
+                    lower.contains("error") || lower.contains("failed") || lower.contains("disconnect") -> "异常"
+                    lower.contains("ready") || lower.contains("connected") || lower.contains("online") -> "在线"
+                    else -> "连接中"
+                }).apply()
+                "ai" -> prefs.edit().putString("aiStatus", when {
+                    lower.contains("error") || lower.contains("failed") || lower.contains("missing_credential") -> "异常"
+                    lower.contains("ready") || lower.contains("connected") -> "在线"
+                    else -> "请求中"
+                }).apply()
+                "network" -> prefs.edit().putString("networkStatus", if (lower.contains("error") || lower.contains("failed")) "异常" else "连接中").apply()
+            }
             RuntimeEventBus.emit(level, module, line, errorCode = errorCode)
         } }
     }

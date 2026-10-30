@@ -77,6 +77,11 @@ class MainActivity : FlutterActivity() {
             "message" to prefs.getString("message", ""),
             "elapsedMs" to prefs.getLong("elapsedMs", 0L),
             "exitCode" to null,
+            "qqStatus" to prefs.getString("qqStatus", "未知"),
+            "aiStatus" to prefs.getString("aiStatus", "未知"),
+            "networkStatus" to prefs.getString("networkStatus", "未知"),
+            "reconnectAttempts" to prefs.getInt("reconnectAttempts", 0),
+            "nextRetryMs" to prefs.getLong("nextRetryMs", 0L),
         )
     }
 

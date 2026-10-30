@@ -51,6 +51,7 @@ class RuntimeService : Service() {
                 val configured = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("credentialsConfigured", false)
                 if (configured) {
                     val network = getSystemService(ConnectivityManager::class.java).activeNetwork
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("networkStatus", if (network == null) "离线" else "在线").apply()
                     update("starting", "network.check", if (network == null) "当前没有可用网络，Runtime 将等待重连" else "检测到可用网络，准备连接网关", System.currentTimeMillis() - started, if (network == null) "network_unavailable" else null)
                     update("starting", "runtime.spawn", "正在启动 Node/DSH 子进程", System.currentTimeMillis() - started)
                     controller = RuntimeProcessController(this)
@@ -133,6 +134,7 @@ class RuntimeService : Service() {
         val delay = minOf(60_000L, 1_000L shl minOf(reconnectAttempt, 6))
         reconnectAttempt++
         update("reconnecting", "network.retry", "第 $reconnectAttempt 次重连，${delay / 1000} 秒后检查", delay)
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("reconnectAttempts", reconnectAttempt).putLong("nextRetryMs", delay).apply()
         reconnectHandler.postDelayed({
             try {
                 if (controller?.isAlive() != true) {
@@ -140,6 +142,7 @@ class RuntimeService : Service() {
                     controller?.start(runtimeEnvironment())
                     update("online", "network.recovered", "Runtime 进程已恢复")
                     reconnectAttempt = 0
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("reconnectAttempts", 0).putLong("nextRetryMs", 0L).apply()
                 }
             } catch (error: Exception) {
                 RuntimeEventBus.emit("error", "network", "重连失败：${error.message ?: error}", errorCode = "runtime_reconnect_failed")
@@ -157,6 +160,7 @@ class RuntimeService : Service() {
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 RuntimeEventBus.emit("info", "network", "网络已恢复，准备检查 Runtime 连接", errorCode = "network_available")
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("networkStatus", "在线").apply()
                 val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
                 if (prefs.getString("status", "") == "reconnecting") {
                     scheduleReconnect()
@@ -164,6 +168,7 @@ class RuntimeService : Service() {
             }
             override fun onLost(network: Network) {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("status", "reconnecting").putString("phase", "network.lost").putString("message", "网络断开，等待恢复").apply()
+                getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("networkStatus", "离线").apply()
                 RuntimeEventBus.emit("warn", "network", "网络已断开，Runtime 将等待恢复", errorCode = "network_lost")
                 getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("网络断开，等待恢复"))
             }
