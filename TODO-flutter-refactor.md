@@ -278,7 +278,7 @@
 ## P12：发布前检查
 
 - [ ] Release APK 不包含 AppID、AppSecret、API Key、模型名称、Base URL、角色卡、会话记录。
-- [ ] APK 使用正式签名并记录 SHA-256。
+- [x] APK 使用工作区专用正式签名；Release 构建会拒绝缺少 keystore 配置的环境，当前 Release SHA-256 已记录到 README。
 - [ ] APK ABI、最低 Android 版本和目标版本写入 README。
 - [ ] Release 页面包含更新说明、文件大小和校验值。
 - [ ] Git 历史和构建目录不包含用户数据。
