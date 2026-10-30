@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/runtime_log.dart';
 import '../models/runtime_state.dart';
 import '../services/runtime_bridge.dart';
+import '../services/public_ip_service.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -19,6 +20,9 @@ class _HomeShellState extends State<HomeShell> {
   RuntimeState _state = const RuntimeState();
   int _index = 0;
   String _publicIp = '未检测';
+  String _publicIpv6 = '未检测';
+  String _ipCheckedAt = '';
+  bool _ipLoading = false;
 
   @override
   void initState() {
@@ -31,6 +35,7 @@ class _HomeShellState extends State<HomeShell> {
       });
     });
     _refreshState();
+    _refreshPublicIp();
   }
 
   @override
@@ -57,10 +62,23 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  Future<void> _refreshPublicIp() async {
+    if (_ipLoading) return;
+    setState(() => _ipLoading = true);
+    final result = await const PublicIpService().lookup();
+    if (!mounted) return;
+    setState(() {
+      _ipLoading = false;
+      _publicIp = result.ipv4 ?? '无法获取';
+      _publicIpv6 = result.ipv6 ?? '无法获取';
+      _ipCheckedAt = '${result.checkedAt.hour.toString().padLeft(2, '0')}:${result.checkedAt.minute.toString().padLeft(2, '0')}';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      _OverviewPage(state: _state, publicIp: _publicIp, onRefreshIp: () => setState(() => _publicIp = '查询接口待接入')),
+      _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, onRefreshIp: _refreshPublicIp),
       _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
       const _PlaceholderPage(title: '设置', message: '更新、后台运行、主题和小组件设置将在后续 P0/P1 阶段接入。'),
@@ -84,15 +102,18 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.publicIp, required this.onRefreshIp});
+  const _OverviewPage({required this.state, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.onRefreshIp});
   final RuntimeState state;
   final String publicIp;
+  final String publicIpv6;
+  final String checkedAt;
+  final bool loadingIp;
   final VoidCallback onRefreshIp;
 
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
         Card(child: ListTile(leading: const Icon(Icons.circle, color: Colors.orange), title: Text(_statusLabel(state.status)), subtitle: Text(state.phase), trailing: Text('${state.elapsedMs} ms'))),
-        Card(child: ListTile(title: const Text('设备公网 IP'), subtitle: Text(publicIp), trailing: IconButton(onPressed: onRefreshIp, icon: const Icon(Icons.refresh)))),
+        Card(child: ListTile(title: const Text('设备公网 IP'), subtitle: Text('IPv4：$publicIp\nIPv6：$publicIpv6${checkedAt.isEmpty ? '' : '\n检测时间：$checkedAt'}'), trailing: loadingIp ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : IconButton(onPressed: onRefreshIp, icon: const Icon(Icons.refresh)))),
         const Card(child: ListTile(title: Text('QQ 官方机器人'), subtitle: Text('未读取凭据状态'))),
         const Card(child: ListTile(title: Text('AI 接口'), subtitle: Text('默认空配置，等待填写'))),
       ]);
