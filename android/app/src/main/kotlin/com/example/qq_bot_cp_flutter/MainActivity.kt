@@ -39,6 +39,8 @@ class MainActivity : FlutterActivity() {
                 "pickAndInstallApk" -> pickAndInstallApk(result)
                 "getUpdateCachePath" -> result.success(File(cacheDir, "online-update.apk").absolutePath)
                 "verifyAndInstallUpdate" -> verifyAndInstallUpdate(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
+                "getThemeSettings" -> result.success(themeSettings())
+                "saveThemeSettings" -> { saveThemeSettings(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 else -> result.notImplemented()
             }
         }
@@ -144,6 +146,21 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.success(mapOf("configured" to true, "stage" to "network", "message" to "官方网关不可达：${error.message ?: error}")) }
             }
         }.start()
+    }
+
+    private fun themeSettings(): Map<String, Any?> {
+        val prefs = getSharedPreferences("theme", MODE_PRIVATE)
+        return mapOf("mode" to prefs.getString("mode", "dark"), "seedColor" to prefs.getInt("seedColor", 0xff8290ff.toInt()), "cardRadius" to prefs.getFloat("cardRadius", 16f), "cardOpacity" to prefs.getFloat("cardOpacity", 1f), "tintedBackground" to prefs.getBoolean("tintedBackground", false))
+    }
+
+    private fun saveThemeSettings(values: Map<*, *>) {
+        getSharedPreferences("theme", MODE_PRIVATE).edit()
+            .putString("mode", values["mode"] as? String ?: "dark")
+            .putInt("seedColor", (values["seedColor"] as? Number)?.toInt() ?: 0xff8290ff.toInt())
+            .putFloat("cardRadius", (values["cardRadius"] as? Number)?.toFloat() ?: 16f)
+            .putFloat("cardOpacity", (values["cardOpacity"] as? Number)?.toFloat() ?: 1f)
+            .putBoolean("tintedBackground", values["tintedBackground"] == true)
+            .apply()
     }
 
     private fun appInfo(): Map<String, String> {
