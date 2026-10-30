@@ -25,9 +25,14 @@ class RuntimeWidgetProvider : AppWidgetProvider() {
             val status = prefs.getString("status", "stopped") ?: "stopped"
             val phase = prefs.getString("phase", "未启动") ?: "未启动"
             val message = prefs.getString("message", "") ?: ""
+            val qq = prefs.getString("qqStatus", "未知") ?: "未知"
+            val ai = prefs.getString("aiStatus", "未知") ?: "未知"
+            val network = prefs.getString("networkStatus", "未知") ?: "未知"
+            val attempts = prefs.getInt("reconnectAttempts", 0)
             val views = RemoteViews(context.packageName, R.layout.widget_runtime).apply {
                 setTextViewText(R.id.widget_status, statusLabel(status))
                 setTextViewText(R.id.widget_phase, "$phase：$message")
+                setTextViewText(R.id.widget_details, "QQ：$qq  ·  AI：$ai  ·  网络：$network${if (attempts > 0) "  ·  重连 $attempts" else ""}")
                 val intent = Intent(context, MainActivity::class.java)
                 setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
             }
