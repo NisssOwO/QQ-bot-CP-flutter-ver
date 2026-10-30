@@ -21,6 +21,7 @@ class _HomeShellState extends State<HomeShell> {
   final _logs = <RuntimeLogEntry>[];
   StreamSubscription<RuntimeLogEntry>? _subscription;
   RuntimeState _state = const RuntimeState();
+  PublicConfig _publicConfig = const PublicConfig();
   int _index = 0;
   String _publicIp = '未检测';
   String _publicIpv6 = '未检测';
@@ -39,6 +40,7 @@ class _HomeShellState extends State<HomeShell> {
       });
     });
     _refreshState();
+    _refreshConfig();
     _refreshPublicIp();
   }
 
@@ -55,6 +57,10 @@ class _HomeShellState extends State<HomeShell> {
     } on PlatformException catch (error) {
       if (mounted) setState(() => _state = RuntimeState(status: RuntimeStatus.failed, message: error.message ?? '桥接失败'));
     }
+  }
+
+  Future<void> _refreshConfig() async {
+    try { final config = await _bridge.config(); if (mounted) setState(() => _publicConfig = config); } catch (_) {}
   }
 
   Future<void> _restart() async {
@@ -107,7 +113,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp)),
+      _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp)),
       _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
       const _PlaceholderPage(title: '设置', message: '更新、后台运行、主题和小组件设置将在后续 P0/P1 阶段接入。'),
@@ -131,13 +137,15 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp});
+  const _OverviewPage({required this.state, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp});
   final RuntimeState state;
   final String publicIp;
   final String publicIpv6;
   final String checkedAt;
   final bool loadingIp;
   final bool hideIp;
+  final bool qqConfigured;
+  final bool llmConfigured;
   final VoidCallback onRefreshIp;
   final ValueChanged<String> onCopyIp;
   final VoidCallback onToggleHideIp;
@@ -153,8 +161,8 @@ class _OverviewPage extends StatelessWidget {
           const SizedBox(height: 4),
           Text('公网 IP 可能变化，不能作为设备永久标识。', style: Theme.of(context).textTheme.bodySmall),
         ]))),
-        const Card(child: ListTile(title: Text('QQ 官方机器人'), subtitle: Text('未读取凭据状态'))),
-        const Card(child: ListTile(title: Text('AI 接口'), subtitle: Text('默认空配置，等待填写'))),
+        Card(child: ListTile(title: const Text('QQ 官方机器人'), subtitle: Text(qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret'), leading: Icon(qqConfigured ? Icons.check_circle : Icons.info_outline, color: qqConfigured ? Colors.greenAccent : Colors.orangeAccent))),
+        Card(child: ListTile(title: const Text('AI 接口'), subtitle: Text(llmConfigured ? 'API Key 已配置' : '等待填写 API Key'), leading: Icon(llmConfigured ? Icons.check_circle : Icons.info_outline, color: llmConfigured ? Colors.greenAccent : Colors.orangeAccent))),
       ]);
 
   static String _statusLabel(RuntimeStatus status) => switch (status) {
@@ -229,6 +237,8 @@ class _ConfigPageState extends State<_ConfigPage> {
   int? selectedHistory;
   EndpointTestResult? endpointTest;
   bool testingEndpoint = false;
+  Map<String, Object?>? qqTest;
+  bool testingQq = false;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -259,6 +269,12 @@ class _ConfigPageState extends State<_ConfigPage> {
     final result = await const EndpointTestService().test(baseUrl.text);
     if (mounted) setState(() { testingEndpoint = false; endpointTest = result; });
   }
+
+  Future<void> _testQq() async {
+    setState(() => testingQq = true);
+    final result = await widget.bridge.testQqConnection();
+    if (mounted) setState(() { testingQq = false; qqTest = result; });
+  }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -276,6 +292,8 @@ class _ConfigPageState extends State<_ConfigPage> {
     const SizedBox(height: 12),
     _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
     _field(secret, 'QQ AppSecret', '已保存时留空表示不修改', obscure: true),
+    FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
+    if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? Colors.greenAccent : Colors.orangeAccent))),
     _field(apiKey, 'AI API Key', '已保存时留空表示不修改', obscure: true),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),

@@ -7,6 +7,8 @@ import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
 import android.os.Build
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : FlutterActivity() {
     private val methodChannel = "qq_bot_cp/runtime"
@@ -24,6 +26,7 @@ class MainActivity : FlutterActivity() {
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "getConfigHistory" -> result.success(configHistory())
                 "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
+                "testQqConnection" -> testQqConnection(result)
                 else -> result.notImplemented()
             }
         }
@@ -105,5 +108,29 @@ class MainActivity : FlutterActivity() {
             val item = items.optJSONObject(index) ?: return@mapNotNull null
             mapOf("protocol" to item.optString("protocol"), "model" to item.optString("model"), "baseUrl" to item.optString("baseUrl"))
         }
+    }
+
+    private fun testQqConnection(result: MethodChannel.Result) {
+        Thread {
+            val credentials = CredentialStore(this)
+            val configured = credentials.has("qqbotAppId") && credentials.has("qqbotSecret")
+            if (!configured) {
+                runOnUiThread { result.success(mapOf("configured" to false, "stage" to "config", "message" to "AppID 或 AppSecret 未配置")) }
+                return@Thread
+            }
+            try {
+                val started = System.currentTimeMillis()
+                val connection = (URL("https://api.sgroup.qq.com").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "HEAD"
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                }
+                val status = connection.responseCode
+                connection.disconnect()
+                runOnUiThread { result.success(mapOf("configured" to true, "stage" to "network", "message" to "官方网关可达（未执行登录）", "statusCode" to status, "elapsedMs" to (System.currentTimeMillis() - started))) }
+            } catch (error: Exception) {
+                runOnUiThread { result.success(mapOf("configured" to true, "stage" to "network", "message" to "官方网关不可达：${error.message ?: error}")) }
+            }
+        }.start()
     }
 }

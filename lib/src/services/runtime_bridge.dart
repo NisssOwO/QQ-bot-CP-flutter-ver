@@ -71,5 +71,7 @@ class RuntimeBridge {
   }
 
   Future<void> deleteConfigHistory() => _methods.invokeMethod<void>('deleteConfigHistory');
+
+  Future<Map<String, Object?>> testQqConnection() async => await _methods.invokeMapMethod<String, Object?>('testQqConnection') ?? {};
 }
 
