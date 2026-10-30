@@ -38,8 +38,27 @@ class RuntimeProcessController(private val context: Context) {
             val previous = prefs.getString(key, "") ?: ""
             val next = (if (previous.isEmpty()) line else "$previous\n$line").takeLast(8192)
             prefs.edit().putString(key, next).apply()
-            val level = if (key == "runtimeLastError") "error" else "info"
-            RuntimeEventBus.emit(level, "node", line)
+            val lower = line.lowercase()
+            val level = when {
+                key != "runtimeLastError" -> "info"
+                lower.contains("warning") || lower.contains("warn") -> "warn"
+                else -> "error"
+            }
+            val module = when {
+                lower.contains("plugin") || lower.contains("import") -> "plugin"
+                lower.contains("qqbot") || lower.contains("websocket") || lower.contains("gateway") -> "qq"
+                lower.contains("llm") || lower.contains("provider") || lower.contains("model") -> "ai"
+                lower.contains("network") || lower.contains("dns") || lower.contains("tls") -> "network"
+                lower.contains("session") -> "session"
+                else -> "node"
+            }
+            val errorCode = when {
+                lower.contains("failed to import") -> "plugin_import_failed"
+                lower.contains("missing_credential") -> "missing_credential"
+                lower.contains("connection error") -> "transport_error"
+                else -> null
+            }
+            RuntimeEventBus.emit(level, module, line, errorCode = errorCode)
         } }
     }
 

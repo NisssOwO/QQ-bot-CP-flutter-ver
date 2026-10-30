@@ -47,12 +47,17 @@ class RuntimeService : Service() {
                 update("starting", "runtime.prepare", "正在准备 Node/DSH 运行文件", System.currentTimeMillis() - started)
                 val root = RuntimeAssetInstaller.install(this)
                 update("starting", "config.load", "读取公开配置和 Keystore 凭据（${root.name}）", System.currentTimeMillis() - started)
+                update("starting", "plugin.load", "正在加载 DSH profile 和 QQ/角色插件", System.currentTimeMillis() - started)
                 val configured = getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("credentialsConfigured", false)
                 if (configured) {
+                    val network = getSystemService(ConnectivityManager::class.java).activeNetwork
+                    update("starting", "network.check", if (network == null) "当前没有可用网络，Runtime 将等待重连" else "检测到可用网络，准备连接网关", System.currentTimeMillis() - started, if (network == null) "network_unavailable" else null)
                     update("starting", "runtime.spawn", "正在启动 Node/DSH 子进程", System.currentTimeMillis() - started)
                     controller = RuntimeProcessController(this)
                     controller?.start(runtimeEnvironment())
                     reconnectAttempt = 0
+                    update("starting", "qq.connect", "已启动 QQ Bot 连接流程，等待 WebSocket 握手", System.currentTimeMillis() - started)
+                    update("starting", "session.restore", "正在准备会话目录（不会把会话内容写入日志）", System.currentTimeMillis() - started)
                     update("online", "ready", "Node/DSH 进程已启动，等待网关和模型就绪", System.currentTimeMillis() - started)
                 } else {
                     update("online", "ready", "服务已就绪，等待在 Flutter 中填写凭据", System.currentTimeMillis() - started)
