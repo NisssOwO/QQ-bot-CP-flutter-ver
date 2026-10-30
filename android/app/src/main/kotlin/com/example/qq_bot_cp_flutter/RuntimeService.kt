@@ -126,13 +126,13 @@ class RuntimeService : Service() {
         )
     }
 
-    private fun scheduleReconnect() {
+    private fun scheduleReconnect(immediate: Boolean = false) {
         if (!getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean("credentialsConfigured", false)) return
         if (controller?.isAlive() == true) {
             reconnectAttempt = 0
             return
         }
-        val delay = minOf(60_000L, 1_000L shl minOf(reconnectAttempt, 6))
+        val delay = if (immediate) 0L else minOf(60_000L, 1_000L shl minOf(reconnectAttempt, 6))
         reconnectAttempt++
         update("reconnecting", "network.retry", "第 $reconnectAttempt 次重连，${delay / 1000} 秒后检查", delay)
         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putInt("reconnectAttempts", reconnectAttempt).putLong("nextRetryMs", delay).apply()
@@ -164,7 +164,7 @@ class RuntimeService : Service() {
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("networkStatus", "在线").apply()
                 val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
                 if (prefs.getString("status", "") == "reconnecting") {
-                    scheduleReconnect()
+                    scheduleReconnect(immediate = true)
                 }
             }
             override fun onLost(network: Network) {
