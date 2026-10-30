@@ -5,10 +5,14 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
 import android.provider.Settings
 import android.net.Uri
 
@@ -170,6 +174,13 @@ class MainActivity : FlutterActivity() {
             return
         }
         try {
+            val cached = File(cacheDir, "pending-update.apk")
+            contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(cached).use { output -> input.copyTo(output) } } ?: throw IllegalArgumentException("无法读取 APK 文件")
+            val validation = validateApk(cached)
+            if (validation["ok"] != "true") {
+                result?.success(mapOf("status" to "rejected", "reason" to (validation["reason"] ?: "APK 校验失败"), "sha256" to (validation["sha256"] ?: "")))
+                return
+            }
             startActivity(Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -178,5 +189,22 @@ class MainActivity : FlutterActivity() {
         } catch (error: Exception) {
             result?.error("INSTALLER_ERROR", error.message, null)
         }
+    }
+
+    private fun validateApk(file: File): Map<String, String> {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        val archive = packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return mapOf("ok" to "false", "reason" to "无法解析 APK 元数据")
+        if (archive.packageName != packageName) return mapOf("ok" to "false", "reason" to "包名不匹配：${archive.packageName}")
+        val current = packageManager.getPackageInfo(packageName, flags)
+        val currentVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) current.longVersionCode else @Suppress("DEPRECATION") current.versionCode.toLong()
+        val archiveVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) archive.longVersionCode else @Suppress("DEPRECATION") archive.versionCode.toLong()
+        if (archiveVersion <= currentVersion) return mapOf("ok" to "false", "reason" to "版本号必须高于当前版本")
+        val archiveSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) archive.signingInfo?.apkContentsSigners else @Suppress("DEPRECATION") archive.signatures
+        val currentSignatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) current.signingInfo?.apkContentsSigners else @Suppress("DEPRECATION") current.signatures
+        if (archiveSignatures.isNullOrEmpty() || currentSignatures.isNullOrEmpty() || !archiveSignatures.first().toCharsString().equals(currentSignatures.first().toCharsString(), ignoreCase = false)) return mapOf("ok" to "false", "reason" to "签名不匹配")
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input -> val buffer = ByteArray(8192); var count = input.read(buffer); while (count > 0) { digest.update(buffer, 0, count); count = input.read(buffer) } }
+        val sha256 = digest.digest().joinToString("") { "%02x".format(it) }
+        return mapOf("ok" to "true", "sha256" to sha256, "versionCode" to archiveVersion.toString())
     }
 }
