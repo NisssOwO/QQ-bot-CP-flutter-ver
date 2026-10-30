@@ -98,6 +98,8 @@ class RuntimeBridge {
   Future<Map<String, Object?>> exportRoleCard(String json) async => ((await _call<Map<dynamic, dynamic>>('exportRoleCard', {'json': json})) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<String?> importRoleCard() async => await _call<String>('importRoleCard', null, const Duration(seconds: 30));
   Future<void> clearData(String kind) async { await _call<void>('clearData', {'kind': kind}); }
+  Future<void> openBatteryOptimizationSettings() async { await _call<void>('openBatteryOptimizationSettings'); }
+  Future<void> openNotificationSettings() async { await _call<void>('openNotificationSettings'); }
 }
 
 class RuntimeBridgeException implements Exception {
