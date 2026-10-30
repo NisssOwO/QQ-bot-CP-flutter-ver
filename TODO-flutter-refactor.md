@@ -19,25 +19,23 @@
 
 - [ ] 创建 Flutter Android 工程和包名 `com.shinycolors.officialbot`。
 - [ ] 固定 Flutter、Dart、Android Gradle Plugin、Gradle、JDK 版本。
-- [ ] 建立 `lib/`、`android/`、`test/`、`integration_test/`、`tool/` 目录。
+- [x] 建立 `lib/`、`android/`、`test/`、`tool/` 目录。`integration_test/` 尚未建立。
 - [ ] 配置 debug、release、arm64-v8a 构建变体。
-- [ ] 配置 lint、format、静态检查和最小 CI 脚本。
-- [ ] 添加不包含任何用户数据的示例配置。
+- [x] 配置 lint 和静态检查；`dart analyze` 已通过。format、CI 尚未接入。
+- [x] 添加不包含任何用户数据的空配置页面和示例模型。
 
 ### P0.2 旧版问题登记（不阻塞重构）
 
-- [ ] 在 Android 9 真机复现闪退。
-- [ ] 采集完整 `FATAL EXCEPTION` 和 Java/Kotlin 堆栈。
-- [ ] 为空配置、缺失凭据、Runtime 未启动、端口不存在、WebView/Flutter 初始化失败增加空值保护。
-- [ ] 修复前台服务启动失败后的 UI 状态处理。
-- [ ] 修复重启过程中重复点击、重复启动和状态竞态。
-- [ ] 增加 Android 9 启动、锁屏、旋转、返回桌面、恢复前台测试。
+- [ ] 记录旧版 Android 9 闪退现象和堆栈，作为迁移回归样本。
+- [ ] 不在旧版 WebView/原生代码上继续扩展功能。
+- [ ] Flutter 版本完成后重新验证同一场景。
+- [ ] 若 Flutter 版本仍复现，再单独建立缺陷修复任务。
 
 ### P0.3 空配置安全启动
 
-- [ ] AppID、AppSecret、API Key、模型、Base URL 默认全部为空。
-- [ ] 空配置时应用正常进入首页，不自动启动真实 Runtime。
-- [ ] UI 显示“未配置”，不显示异常堆栈代替提示。
+- [x] AppID、AppSecret、API Key、模型、Base URL 默认全部为空。
+- [x] 空配置时应用正常进入首页，不自动启动真实 Runtime。
+- [x] UI 显示“未配置”，不显示异常堆栈代替提示。
 - [ ] 点击启动时给出明确缺少字段列表。
 - [ ] 空角色列表时显示空状态，不加载任何内置角色卡。
 
@@ -48,16 +46,16 @@
 ### P1.1 总体架构
 
 - [ ] Flutter 只负责 UI、状态管理、配置编辑和用户交互。
-- [ ] 原生 Android Foreground Service 负责启动/停止/重启 Node/DSH Runtime。
-- [ ] 使用 MethodChannel 发送命令：`startRuntime`、`stopRuntime`、`restartRuntime`。
-- [ ] 使用 EventChannel 推送 Runtime 状态、日志、网络状态和更新进度。
-- [ ] 统一定义状态模型：`stopped`、`starting`、`online`、`reconnecting`、`failed`、`stopping`。
+- [x] 原生 Android Foreground Service 负责启动/停止/重启 Node/DSH Runtime；当前已完成服务和进程控制骨架，真实凭据启动尚未真机验证。
+- [x] 使用 MethodChannel 发送命令：`startRuntime`、`stopRuntime`、`restartRuntime`。
+- [ ] 使用 EventChannel 推送 Runtime 状态、日志、网络状态和更新进度。已建立通道，但事件推送仍是占位。
+- [x] 统一定义状态模型：`stopped`、`starting`、`online`、`reconnecting`、`failed`、`stopping`。
 - [ ] 所有桥接调用都提供超时、取消、错误码和重试策略。
 
 ### P1.2 页面迁移
 
-- [ ] 总览页：Runtime 状态、QQ 状态、模型状态、网络状态、公网 IP。
-- [ ] AI 配置页：协议、模型、Base URL、API Key、历史配置。
+- [x] 总览页：Runtime 状态、QQ 状态、模型状态和公网 IP 占位已建立；公网 IP 查询、真实 QQ/模型状态尚未接入。
+- [x] AI 配置页：协议、模型、Base URL、API Key 已可填写和保存；历史配置尚未实现。
 - [ ] QQ 配置页：AppID、AppSecret、连接状态、测试连接。
 - [ ] 日志页：级别筛选、模块筛选、阶段耗时、复制和导出。
 - [ ] 角色页：自定义角色卡新建、编辑、导入、导出、删除确认。
@@ -66,7 +64,7 @@
 
 ### P1.3 UI 线程与后台任务
 
-- [ ] UI isolate 只处理渲染和交互。
+- [x] UI isolate 只处理渲染和交互；耗时 Runtime 工作由原生 Service 承担。
 - [ ] JSON 解析、日志筛选、配置备份、哈希计算放入 Dart isolate。
 - [ ] APK 下载、文件复制、签名校验放入原生后台线程。
 - [ ] AI 请求由 Node/DSH Runtime 负责，不在 Flutter UI 中直接请求。
@@ -117,7 +115,7 @@
 
 ### P3.3 安全存储
 
-- [ ] AppSecret、API Key 使用 Keystore 加密。
+- [x] AppSecret、API Key 使用 Keystore 加密。
 - [ ] 配置导出默认脱敏，不导出密钥。
 - [ ] 日志过滤 `Bearer`、`API_KEY`、`SECRET`、Token 和请求体。
 - [ ] 卸载/清除数据时明确提示凭据会被删除。
@@ -164,8 +162,8 @@
 
 ### P6.1 前台服务
 
-- [ ] 运行 Runtime 时使用 Foreground Service。
-- [ ] 常驻通知显示 QQ、AI、网络三项状态。
+- [x] 运行 Runtime 时使用 Foreground Service。
+- [ ] 常驻通知已建立，但目前只显示 Runtime 服务状态，QQ/AI/网络细分状态尚未接入。
 - [ ] 通知提供“打开应用”“停止 Runtime”操作。
 - [ ] 引导用户关闭电池优化，但不强制修改系统设置。
 - [ ] 处理 Android 9、MIUI/HyperOS 的后台限制差异。
@@ -291,4 +289,6 @@
 - [ ] P10：迁移、备份和恢复完成。
 - [ ] P11：真机矩阵通过。
 - [ ] P12：干净 APK 和发布审计通过。
+
+
 
