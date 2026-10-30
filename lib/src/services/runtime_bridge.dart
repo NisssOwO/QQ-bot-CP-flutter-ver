@@ -20,6 +20,7 @@ class RuntimeBridge {
           message: '${raw['message'] ?? ''}',
           elapsedMs: raw['elapsedMs'] as int?,
           runId: raw['runId'] as String?,
+          errorCode: raw['errorCode'] as String?,
         );
       });
 

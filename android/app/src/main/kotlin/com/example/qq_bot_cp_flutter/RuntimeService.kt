@@ -57,7 +57,7 @@ class RuntimeService : Service() {
                 }
                 update("online", "restart.complete", "启动流程完成", System.currentTimeMillis() - started)
             } catch (error: Exception) {
-                update("failed", "restart.failed", "启动失败：${error.message ?: error}", System.currentTimeMillis() - started)
+                update("failed", "restart.failed", "启动失败：${error.message ?: error}", System.currentTimeMillis() - started, "runtime_start_failed")
             }
             getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("服务已就绪"))
         }, "runtime-bootstrap").start()
@@ -72,11 +72,11 @@ class RuntimeService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun update(status: String, phase: String, message: String, elapsedMs: Long = 0) {
+    private fun update(status: String, phase: String, message: String, elapsedMs: Long = 0, errorCode: String? = null) {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
             .putString("status", status).putString("phase", phase)
             .putString("message", message).putLong("elapsedMs", elapsedMs).apply()
-        RuntimeEventBus.emit("info", "runtime", "$phase：$message", elapsedMs.takeIf { it > 0 })
+        RuntimeEventBus.emit(if (status == "failed") "error" else "info", "runtime", "$phase：$message", elapsedMs.takeIf { it > 0 }, errorCode)
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification("$phase：$message"))
     }
 
