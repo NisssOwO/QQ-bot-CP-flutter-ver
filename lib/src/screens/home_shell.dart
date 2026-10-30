@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/runtime_log.dart';
+import '../models/public_config.dart';
 import '../models/runtime_state.dart';
 import '../services/runtime_bridge.dart';
 import '../services/public_ip_service.dart';
@@ -214,17 +215,20 @@ class _ConfigPageState extends State<_ConfigPage> {
   final secret = TextEditingController();
   final apiKey = TextEditingController();
   bool loading = true;
+  List<AiConfigHistory> history = const [];
+  int? selectedHistory;
 
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { for (final c in [protocol, model, baseUrl, appId, secret, apiKey]) { c.dispose(); } super.dispose(); }
   Future<void> _load() async {
-    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; }
+    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; history = await widget.bridge.configHistory(); }
     finally { if (mounted) setState(() => loading = false); }
   }
   Future<void> _save() async {
     await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), appId: appId.text.trim(), secret: secret.text, apiKey: apiKey.text);
+    history = await widget.bridge.configHistory();
     secret.clear(); apiKey.clear();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
   }
@@ -232,6 +236,10 @@ class _ConfigPageState extends State<_ConfigPage> {
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 16),
+    if (history.isNotEmpty) ...[
+      DropdownButtonFormField<int>(value: selectedHistory, decoration: const InputDecoration(labelText: '历史 AI 配置（不含密钥）', border: OutlineInputBorder()), items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))], onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); }),
+      const SizedBox(height: 12),
+    ],
     _field(protocol, '接口类型', 'openai-compatible / anthropic-messages'),
     _field(model, '模型名称', '留空，填写后才会调用模型'),
     _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写'),
@@ -240,6 +248,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     _field(apiKey, 'AI API Key', '已保存时留空表示不修改', obscure: true),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),
+    if (history.isNotEmpty) TextButton.icon(onPressed: () async { await widget.bridge.deleteConfigHistory(); if (mounted) setState(() { history = const []; selectedHistory = null; }); }, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置')),
   ]);
 
   Widget _field(TextEditingController c, String label, String hint, {bool obscure = false}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));

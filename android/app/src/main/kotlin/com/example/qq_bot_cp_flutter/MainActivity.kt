@@ -22,6 +22,8 @@ class MainActivity : FlutterActivity() {
                 "getRuntimeState" -> result.success(runtimeState())
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "getConfigHistory" -> result.success(configHistory())
+                "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
                 else -> result.notImplemented()
             }
         }
@@ -75,5 +77,33 @@ class MainActivity : FlutterActivity() {
             .apply()
         val configured = credentials.has("qqbotAppId") && credentials.has("qqbotSecret") && credentials.has("llmApiKey")
         getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("credentialsConfigured", configured).apply()
+        saveConfigHistory(
+            values["protocol"] as? String ?: "",
+            values["model"] as? String ?: "",
+            values["baseUrl"] as? String ?: "",
+        )
+    }
+
+    private fun saveConfigHistory(protocol: String, model: String, baseUrl: String) {
+        if (protocol.isBlank() && model.isBlank() && baseUrl.isBlank()) return
+        val prefs = getSharedPreferences("public-config-history", MODE_PRIVATE)
+        val items = try { org.json.JSONArray(prefs.getString("items", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+        val next = org.json.JSONArray()
+        next.put(org.json.JSONObject().put("protocol", protocol.trim()).put("model", model.trim()).put("baseUrl", baseUrl.trim()))
+        for (index in 0 until minOf(items.length(), 9)) {
+            val item = items.optJSONObject(index) ?: continue
+            if (item.optString("protocol") == protocol.trim() && item.optString("model") == model.trim() && item.optString("baseUrl") == baseUrl.trim()) continue
+            next.put(item)
+        }
+        prefs.edit().putString("items", next.toString()).apply()
+    }
+
+    private fun configHistory(): List<Map<String, String>> {
+        val prefs = getSharedPreferences("public-config-history", MODE_PRIVATE)
+        val items = try { org.json.JSONArray(prefs.getString("items", "[]")) } catch (_: Exception) { org.json.JSONArray() }
+        return (0 until items.length()).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            mapOf("protocol" to item.optString("protocol"), "model" to item.optString("model"), "baseUrl" to item.optString("baseUrl"))
+        }
     }
 }
