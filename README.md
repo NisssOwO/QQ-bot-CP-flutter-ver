@@ -48,6 +48,12 @@ powershell -ExecutionPolicy Bypass -File .\tool\smoke-android16.ps1
 powershell -ExecutionPolicy Bypass -File .\tool\test-empty-role-preset.ps1
 ```
 
+验证官方事件规范化、私聊/群聊角色隔离和多群隔离：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tool\test-official-session-isolation.ps1
+```
+
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
 
 Runtime Bundle 不作为普通 Git 文件提交。准备干净 Runtime 时执行：
