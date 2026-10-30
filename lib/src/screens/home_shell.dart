@@ -208,6 +208,7 @@ class _ConfigPage extends StatefulWidget {
 }
 
 class _ConfigPageState extends State<_ConfigPage> {
+  static const protocols = <String>['', 'openai-compatible', 'openai-responses', 'anthropic-messages'];
   final protocol = TextEditingController();
   final model = TextEditingController();
   final baseUrl = TextEditingController();
@@ -227,9 +228,18 @@ class _ConfigPageState extends State<_ConfigPage> {
     finally { if (mounted) setState(() => loading = false); }
   }
   Future<void> _save() async {
+    final url = baseUrl.text.trim();
+    if (url.isNotEmpty) {
+      final parsed = Uri.tryParse(url);
+      if (parsed == null || (parsed.scheme != 'http' && parsed.scheme != 'https') || parsed.host.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Base URL 必须是有效的 HTTP/HTTPS 地址')));
+        return;
+      }
+    }
     await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), appId: appId.text.trim(), secret: secret.text, apiKey: apiKey.text);
-    history = await widget.bridge.configHistory();
+    final nextHistory = await widget.bridge.configHistory();
     secret.clear(); apiKey.clear();
+    if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
   }
   @override
@@ -240,7 +250,8 @@ class _ConfigPageState extends State<_ConfigPage> {
       DropdownButtonFormField<int>(value: selectedHistory, decoration: const InputDecoration(labelText: '历史 AI 配置（不含密钥）', border: OutlineInputBorder()), items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))], onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); }),
       const SizedBox(height: 12),
     ],
-    _field(protocol, '接口类型', 'openai-compatible / anthropic-messages'),
+    DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
+    const SizedBox(height: 12),
     _field(model, '模型名称', '留空，填写后才会调用模型'),
     _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写'),
     _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
@@ -248,8 +259,15 @@ class _ConfigPageState extends State<_ConfigPage> {
     _field(apiKey, 'AI API Key', '已保存时留空表示不修改', obscure: true),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),
-    if (history.isNotEmpty) TextButton.icon(onPressed: () async { await widget.bridge.deleteConfigHistory(); if (mounted) setState(() { history = const []; selectedHistory = null; }); }, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置')),
+    if (history.isNotEmpty) TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置')),
   ]);
+
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('清除历史配置？'), content: const Text('只会删除接口类型、模型和 Base URL 历史，不会删除已保存的密钥。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('清除'))])) ?? false;
+    if (!confirmed) return;
+    await widget.bridge.deleteConfigHistory();
+    if (mounted) setState(() { history = const []; selectedHistory = null; });
+  }
 
   Widget _field(TextEditingController c, String label, String hint, {bool obscure = false}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
 }
