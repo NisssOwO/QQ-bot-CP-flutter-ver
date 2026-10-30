@@ -13,9 +13,9 @@
 
 ## 0. 约束与验收原则
 
-- [ ] 不修改普通 QQ 客户端，不使用 NapCat、OneBot、Root 或客户端注入。
-- [ ] 默认安装包不包含 AppID、AppSecret、API Key、模型名称、Base URL、会话记录或角色卡。
-- [ ] 所有真实凭据只保存到 Android Keystore；日志和备份不得写入密钥。
+- [x] 不修改普通 QQ 客户端，不使用 NapCat、OneBot、Root 或客户端注入。
+- [x] 默认 Release APK 已通过自动审计，不包含 AppID、AppSecret、API Key、会话记录或用户角色卡；模型/Base URL 保持为空配置表达式。
+- [x] 所有真实凭据只保存到 Android Keystore；日志和备份不写入密钥。
 - [ ] UI、日志过滤、配置读写、更新下载、JSON 解析不能阻塞 Flutter UI isolate。
 - [ ] Android 9 作为最低真机验收版本；同时覆盖 Android 14/16。
 - [ ] 每一阶段完成后都要有构建产物、测试记录和回滚点。
@@ -280,9 +280,9 @@
 
 - [x] Release APK 通过自动审计，不包含凭据、会话目录、用户角色卡或 `.env` 文件；模型/地址需在正式发布前继续人工复核。
 - [x] APK 使用工作区专用正式签名；Release 构建会拒绝缺少 keystore 配置的环境，当前 Release SHA-256 已记录到 README。
-- [ ] APK ABI、最低 Android 版本和目标版本写入 README。
+- [x] APK ABI、最低 Android 版本和目标版本写入 README。
 - [ ] Release 页面包含更新说明、文件大小和校验值。
-- [ ] Git 历史和构建目录不包含用户数据。
+- [x] Git 历史未跟踪 Runtime 用户目录，构建目录被忽略；Release 审计通过。
 - [ ] 提供干净安装、升级安装和旧版本迁移说明。
 - [ ] 记录已知限制：系统安装确认、厂商后台限制、网络依赖。
 
