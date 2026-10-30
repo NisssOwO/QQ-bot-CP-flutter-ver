@@ -44,6 +44,7 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info" />
         </receiver>
+        <receiver android:name="com.shinycolors.officialbot.RuntimeActionReceiver" android:exported="false" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

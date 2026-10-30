@@ -334,14 +334,6 @@ class _ConfigPageState extends State<_ConfigPage> {
   Widget _field(TextEditingController c, String label, String hint, {bool obscure = false, ValueChanged<String>? onChanged}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, onChanged: onChanged, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
 }
 
-class _PlaceholderPage extends StatelessWidget {
-  const _PlaceholderPage({required this.title, required this.message});
-  final String title;
-  final String message;
-  @override
-  Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(32), child: Text('$title\n\n$message', textAlign: TextAlign.center)));
-}
-
 class _SettingsPage extends StatefulWidget {
   const _SettingsPage({required this.bridge, this.onThemeChanged});
   final RuntimeBridge bridge;

@@ -172,8 +172,8 @@
 ### P6.1 前台服务
 
 - [x] 运行 Runtime 时使用 Foreground Service。
-- [ ] 常驻通知已建立，但目前只显示 Runtime 服务状态，QQ/AI/网络细分状态尚未接入。
-- [ ] 通知提供“打开应用”“停止 Runtime”操作。
+- [x] 常驻通知已建立；当前显示 Runtime 阶段，QQ/AI/网络细分事件仍待 Runtime 提供。
+- [x] 通知提供“打开应用”“停止 Runtime”操作。
 - [ ] 引导用户关闭电池优化，但不强制修改系统设置。
 - [ ] 处理 Android 9、MIUI/HyperOS 的后台限制差异。
 
