@@ -17,6 +17,7 @@ object RuntimeAssetInstaller {
             refreshProfile(context, target)
             refreshPiAiManifest(context, target)
             refreshOpenAiParser(context, target)
+            refreshTurnErrorNormalizer(context, target)
             refreshAndroidRuntimeOverrides(context, target)
             return target
         }
@@ -25,6 +26,7 @@ object RuntimeAssetInstaller {
         refreshProfile(context, target)
         refreshPiAiManifest(context, target)
         refreshOpenAiParser(context, target)
+        refreshTurnErrorNormalizer(context, target)
         refreshAndroidRuntimeOverrides(context, target)
         File(target, "bin/node").setExecutable(true, false)
         prefs.edit().putString("assetVersion", VERSION).apply()
@@ -95,9 +97,24 @@ object RuntimeAssetInstaller {
         }
     }
 
+    /** Error normalization is a small Android override and must refresh cached bundles. */
+    private fun refreshTurnErrorNormalizer(context: Context, target: File) {
+        val source = "runtime/runtime/turn-error-normalizer.mjs"
+        val output = File(target, "runtime/turn-error-normalizer.mjs")
+        try {
+            context.assets.open(source).use { input ->
+                output.parentFile?.mkdirs()
+                FileOutputStream(output).use { file -> input.copyTo(file, 16 * 1024) }
+            }
+        } catch (_: Exception) {
+            // Keep the previous copy so a transient asset read does not break Runtime startup.
+        }
+    }
+
     private fun refreshAndroidRuntimeOverrides(context: Context, target: File) {
         val files = listOf(
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/outbound.js",
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/middleware/typing-indicator.js",
         )
         files.forEach { assetPath ->
