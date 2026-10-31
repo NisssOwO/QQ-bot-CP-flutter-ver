@@ -57,6 +57,14 @@
   disabled: true
 - id: tool-pwsh
   disabled: true
+- id: working-directory
+  disabled: true
+- id: tool-working-directory
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-fs-search
+  disabled: true
 
 - id: image-offload
   disabled: true

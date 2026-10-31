@@ -52,7 +52,7 @@ object RuntimeAssetInstaller {
             copyTree(context, source, installed)
             // Profile policy can change independently of the large Runtime bundle. Always
             // refresh this small patch so an installed app picks up Android-specific settings.
-            val patchAsset = "$source/profiles/qqbot/cordis.patch.yml"
+            val patchAsset = "runtime/qqbot-android.patch.yml"
             context.assets.open(patchAsset).use { input ->
                 val output = File(installed, "profiles/qqbot/cordis.patch.yml")
                 output.parentFile?.mkdirs()
