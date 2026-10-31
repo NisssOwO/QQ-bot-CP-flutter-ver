@@ -2,6 +2,7 @@ package com.shinycolors.officialbot
 
 import android.content.Context
 import java.io.File
+import java.io.FileOutputStream
 
 class RuntimeProcessController(private val context: Context) {
     private var process: Process? = null
@@ -11,14 +12,16 @@ class RuntimeProcessController(private val context: Context) {
     @Synchronized fun start(environment: Map<String, String>) {
         if (process?.isAlive == true) return
         val root = File(context.filesDir, "runtime")
-        val node = File(root, "bin/node")
+        val bundledNode = File(root, "bin/node")
         val entry = File(root, "runtime-entry.mjs")
-        require(node.isFile && entry.isFile) { "Runtime bundle is incomplete" }
+        require(bundledNode.isFile && entry.isFile) { "Runtime bundle is incomplete" }
+        val nativeNode = File(context.applicationInfo.nativeLibraryDir, "libnode.so")
+        val node = if (nativeNode.isFile) nativeNode else stageExecutable(bundledNode)
         val env = HashMap(System.getenv())
         env.putAll(environment)
         env["SHINY_RUNTIME_ROOT"] = root.absolutePath
         env["SHINY_NODE_BIN"] = node.absolutePath
-        env["LD_LIBRARY_PATH"] = File(root, "bin").absolutePath
+        env["LD_LIBRARY_PATH"] = "${File(root, "bin").absolutePath}:${context.applicationInfo.nativeLibraryDir}"
         val child = ProcessBuilder(node.absolutePath, entry.absolutePath)
             .directory(root).redirectErrorStream(false).apply { environment().putAll(env) }.start()
         process = child
@@ -33,6 +36,16 @@ class RuntimeProcessController(private val context: Context) {
             prefs.edit().putBoolean("runtimeProcessAlive", false).putString("status", if (exit == 0) "stopped" else "failed").putInt("runtimeExitCode", exit).apply()
             RuntimeEventBus.emit(if (exit == 0) "info" else "error", "runtime", "Node/DSH 进程退出，退出码=$exit", errorCode = if (exit == 0) null else "runtime_exit_nonzero")
         }.start()
+    }
+
+    private fun stageExecutable(source: File): File {
+        val staged = File(context.codeCacheDir, "qqbot-runtime-node")
+        if (!staged.isFile || staged.length() != source.length()) {
+            source.inputStream().use { input -> FileOutputStream(staged).use { output -> input.copyTo(output, 256 * 1024) } }
+        }
+        staged.setReadable(true, true)
+        staged.setExecutable(true, true)
+        return staged
     }
 
     private fun readStream(stream: java.io.InputStream, key: String) {
