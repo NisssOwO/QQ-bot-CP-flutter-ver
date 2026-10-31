@@ -5,7 +5,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 object RuntimeAssetInstaller {
-    private const val VERSION = "node26-bundle-v42"
+    private const val VERSION = "node26-bundle-v43"
 
     fun install(context: Context): File {
         val target = File(context.filesDir, "runtime")
@@ -15,11 +15,13 @@ object RuntimeAssetInstaller {
         if (ready) {
             refreshEntry(context, target)
             refreshProfile(context, target)
+            refreshPiAiManifest(context, target)
             return target
         }
         copyTree(context, "runtime", target)
         refreshEntry(context, target)
         refreshProfile(context, target)
+        refreshPiAiManifest(context, target)
         File(target, "bin/node").setExecutable(true, false)
         prefs.edit().putString("assetVersion", VERSION).apply()
         return target
@@ -42,8 +44,36 @@ object RuntimeAssetInstaller {
     private fun refreshProfile(context: Context, target: File) {
         val source = if (hasAssets(context, "runtime/dsh-home")) "runtime/dsh-home" else "runtime/assets-dsh-home"
         try {
-            copyTree(context, source, File(target, "dsh-home"))
+            val installed = File(target, "dsh-home")
+            copyTree(context, source, installed)
+            // Profile policy can change independently of the large Runtime bundle. Always
+            // refresh this small patch so an installed app picks up Android-specific settings.
+            val patchAsset = "$source/profiles/qqbot/cordis.patch.yml"
+            context.assets.open(patchAsset).use { input ->
+                val output = File(installed, "profiles/qqbot/cordis.patch.yml")
+                output.parentFile?.mkdirs()
+                FileOutputStream(output).use { file -> input.copyTo(file, 8 * 1024) }
+            }
         } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Android asset packaging does not reliably preserve dot-prefixed files. pi-ai imports
+     * this catalog as data/.manifest.json, so ship it under a visible asset name and restore
+     * the exact runtime filename after extraction. This runs even on a cached bundle so a
+     * previously installed v42 runtime is repaired without clearing app data.
+     */
+    private fun refreshPiAiManifest(context: Context, target: File) {
+        val source = "runtime/node_modules/@earendil-works/pi-ai/dist/providers/data/manifest.json"
+        val output = File(target, "node_modules/@earendil-works/pi-ai/dist/providers/data/.manifest.json")
+        try {
+            context.assets.open(source).use { input ->
+                output.parentFile?.mkdirs()
+                FileOutputStream(output).use { file -> input.copyTo(file, 8 * 1024) }
+            }
+        } catch (_: Exception) {
+            // The runtime will report a precise missing-manifest error if the bundle is incomplete.
         }
     }
 
