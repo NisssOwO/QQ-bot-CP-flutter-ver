@@ -7,8 +7,8 @@
 - ABI：arm64-v8a
 - 最低 Android：24
 - 目标 Android：36
-- APK 大小：167,219,181 字节（约 159.5 MiB）
-- SHA-256：a9f45ac940d40a8c82293aab4e96d43ad1bc5af4385323ba993664911163d6f2
+- APK 大小：176,880,840 字节（约 168.7 MiB）
+- SHA-256：5b87e45c82c2a35f30a61450a6420ed6c33f2caf556e3a1211d56ab3624f6ad4
 - 签名：工作区专用 Release keystore，APK v2 验证通过
 
 ## 本版本内容
@@ -17,6 +17,7 @@
 - AI 接口、模型拉取和思考程度配置
 - QQ 官方机器人配置
 - 角色卡新建、编辑、导入、删除和默认角色
+- Android Runtime 自动恢复默认角色 preset；禁用不兼容的 bash、文件读取和工作目录工具
 - Runtime 启动引导、阶段日志和预计耗时
 - Android Foreground Service、通知和桌面小组件
 - 公网 IPv4/IPv6 展示
