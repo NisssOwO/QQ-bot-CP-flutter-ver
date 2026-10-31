@@ -361,32 +361,51 @@ class _ConfigPageState extends State<_ConfigPage> {
     finally { if (mounted) setState(() => loadingModels = false); }
   }
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
-    const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 16),
-    if (history.isNotEmpty) ...[
-      DropdownButtonFormField<int>(value: selectedHistory, decoration: const InputDecoration(labelText: '历史 AI 配置（不含密钥）', border: OutlineInputBorder()), items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))], onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); }),
-      const SizedBox(height: 12),
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+    children: [
+      const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6),
+      Text('先填写接口与模型，再保存凭据；每个区块之间留有明确间距。', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 20),
+      if (history.isNotEmpty) ...[
+        _sectionTitle('快速选择', '选择历史配置会填入接口、模型和地址，不会覆盖密钥。'),
+        DropdownButtonFormField<int>(value: selectedHistory, decoration: const InputDecoration(labelText: '历史 AI 配置', border: OutlineInputBorder()), items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))], onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); }),
+        const SizedBox(height: 20),
+      ],
+      _sectionTitle('AI 接口', '接口类型、模型和 Base URL 会用于发送模型请求。'),
+      const SizedBox(height: 10),
+      DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
+      const SizedBox(height: 14),
+      if (modelOptions.isNotEmpty) ...[
+        DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '已拉取的模型', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
+        const SizedBox(height: 14),
+      ],
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _field(model, '模型名称', '可手动输入，或先拉取模型列表')), const SizedBox(width: 12), Padding(padding: const EdgeInsets.only(top: 4), child: FilledButton.tonalIcon(onPressed: loadingModels ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型')))]),
+      const SizedBox(height: 4),
+      DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
+      const SizedBox(height: 14),
+      _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写', onChanged: (_) => setState(() {})),
+      FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')),
+      if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+      const SizedBox(height: 24),
+      _sectionTitle('QQ 官方机器人', 'AppID 与 AppSecret 用于连接 QQ 官方机器人服务。'),
+      const SizedBox(height: 10),
+      _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
+      _field(secret, 'QQ AppSecret', qqConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
+      FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
+      if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+      const SizedBox(height: 24),
+      _sectionTitle('AI 接口凭据', '密钥只保存到 Android Keystore；输入框留空表示保持原值。'),
+      const SizedBox(height: 10),
+      _field(apiKey, 'AI API Key', llmConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
+      const SizedBox(height: 4),
+      SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置'))),
+      if (history.isNotEmpty) Center(child: TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置'))),
     ],
-    DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
-    const SizedBox(height: 12),
-    if (modelOptions.isNotEmpty) DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '模型名称（拉取列表）', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
-    Row(children: [Expanded(child: _field(model, '模型名称', '可手动输入，也可先点击“拉取模型”选择')), const SizedBox(width: 8), FilledButton.tonalIcon(onPressed: loadingModels ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型'))]),
-    DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
-    _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写', onChanged: (_) => setState(() {})),
-    Row(children: [Expanded(child: FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')))]),
-    if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-    const SizedBox(height: 12),
-    _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
-    _field(secret, 'QQ AppSecret', qqConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
-    FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
-    if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-    const Padding(padding: EdgeInsets.only(top: 8, bottom: 4), child: Text('AI 接口凭据', style: TextStyle(fontWeight: FontWeight.bold))),
-    _field(apiKey, 'AI API Key', llmConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
-    const SizedBox(height: 8),
-    FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),
-    if (history.isNotEmpty) TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置')),
-  ]);
+  );
+
+  Widget _sectionTitle(String title, String description) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(description, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))]);
 
   Future<void> _clearHistory() async {
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('清除历史配置？'), content: const Text('只会删除接口类型、模型和 Base URL 历史，不会删除已保存的密钥。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('清除'))])) ?? false;
