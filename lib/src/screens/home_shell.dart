@@ -414,6 +414,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); final savedUpdateUrl = await widget.bridge.updateEndpoint(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = savedUpdateUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
+  Future<void> _saveUpdateEndpoint(String value) async { try { await widget.bridge.saveUpdateEndpoint(value); } catch (_) {} }
   Future<void> _install() async {
     setState(() => installing = true);
     final result = await widget.bridge.pickAndInstallApk();
@@ -480,7 +481,7 @@ class _SettingsPageState extends State<_SettingsPage> {
     ]),
     const Text('系统可能限制后台活动；请按需允许本应用后台运行和通知。', style: TextStyle(color: Colors.white60)),
     const SizedBox(height: 12),
-    TextField(controller: updateUrl, onChanged: (value) { widget.bridge.saveUpdateEndpoint(value); setState(() {}); }, decoration: const InputDecoration(labelText: '更新清单 URL', hintText: '留空；填写公开 JSON 地址', border: OutlineInputBorder())),
+    TextField(controller: updateUrl, onChanged: (value) { _saveUpdateEndpoint(value); setState(() {}); }, decoration: const InputDecoration(labelText: '更新清单 URL', hintText: '留空；填写公开 JSON 地址', border: OutlineInputBorder())),
     const SizedBox(height: 8),
     FilledButton.tonalIcon(onPressed: checkingUpdate || updateUrl.text.trim().isEmpty ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
     if (manifest != null) ...[
