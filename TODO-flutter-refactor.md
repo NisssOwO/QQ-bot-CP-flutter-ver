@@ -6,7 +6,7 @@
 
 当前排期调整：Android 9 适配和真机验收后置，先完成正常版本功能、Android 16 验证和 Release 发布链路；Android 9 不作为当前阶段阻塞条件。
 
-当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包，但尚未完成真机真实 QQ/Node 启动。
+当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包；总览页已提供启动步骤、当前阶段和预计耗时，最新 APK 已构建并通过用户数据审计，但设备端 USB 安装权限尚未放行，因此真实 QQ/Node 启动仍待真机验收。
 
 范围调整：
 - 直接重构，不以修复旧版 UI 或旧版原生空指针作为启动条件。
@@ -77,6 +77,7 @@
 - [x] 角色保存/删除同步 Runtime `presets` 文件，应用内自定义角色可被 DSH `/preset` 直接发现；避免角色列表重复显示。
 - [x] 设置页：后台运行、通知、电池优化、更新、数据清理；后台入口跳转系统设置，不强制修改系统策略。
 - [x] 设置页显示版本号和构建 ABI，并提供本地 APK 更新入口；在线检查更新待实现。
+- [x] 总览页提供首次启动步骤、配置入口、启动按钮、当前阶段说明和阶段预计耗时。
 
 ### P1.3 UI 线程与后台任务
 
@@ -266,7 +267,7 @@
 
 - [ ] Android 9 arm64：冷启动、空配置、配置保存、Runtime 启停、重启、锁屏。
 - [ ] Android 9：Wi-Fi 断开/恢复、移动网络切换、DNS 失败、TLS 失败。
-- [x] Android 16 arm64：已实机验证安装、冷启动、空配置首页、设置页、角色页、包名/ABI 和小组件 Provider 注册；并提供 `tool/smoke-android16.ps1` 可重复执行。
+- [x] Android 16 arm64：旧 Debug 包已实机验证安装、冷启动、空配置首页、设置页、角色页、包名/ABI 和小组件 Provider 注册；最新 Debug 包已构建，但当前设备拒绝 USB 安装，真实 Runtime 启动验收待继续。
 - [ ] MIUI/HyperOS：省电限制、自动启动、后台冻结、通知权限。
 
 ### 功能
