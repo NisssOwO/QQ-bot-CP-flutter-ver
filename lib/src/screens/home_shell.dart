@@ -176,8 +176,20 @@ class _OverviewPage extends StatelessWidget {
   final VoidCallback onRestart;
 
   @override
-  Widget build(BuildContext context) => ListView(cacheExtent: 1200, padding: const EdgeInsets.fromLTRB(16, 16, 16, 144), children: [
+  Widget build(BuildContext context) => ListView(cacheExtent: 5000, padding: const EdgeInsets.fromLTRB(16, 16, 16, 144), children: [
         Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state)), trailing: Text('${state.elapsedMs} ms'))),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(qqConfigured && llmConfigured ? '配置已齐全：点击“启动 Runtime”后，应用会依次加载配置、启动服务、连接 QQ，再进入运行状态。' : '首次使用请按顺序完成：1. 填写 AI 接口、模型、Base URL 和 AI 密钥；2. 填写 QQ AppID 与 AppSecret；3. 保存配置；4. 返回这里启动 Runtime。'),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if (!qqConfigured || !llmConfigured) OutlinedButton.icon(onPressed: onOpenAi, icon: const Icon(Icons.settings), label: const Text('去填写配置')),
+            FilledButton.icon(onPressed: onRestart, icon: const Icon(Icons.play_arrow), label: Text(state.status == RuntimeStatus.online ? '重新启动 Runtime' : '启动 Runtime')),
+          ]),
+        ]))),
+        Card(child: ListTile(title: const Text('QQ 官方机器人'), subtitle: Text(qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret'), leading: Icon(qqConfigured ? Icons.check_circle : Icons.info_outline, color: qqConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+        Card(child: ListTile(title: const Text('AI 接口'), subtitle: Text(llmConfigured ? 'API Key 已配置' : '等待填写 API Key'), leading: Icon(llmConfigured ? Icons.check_circle : Icons.info_outline, color: llmConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
           Chip(avatar: const Icon(Icons.chat, size: 16), label: Text('QQ：${state.qqStatus}')),
           Chip(avatar: const Icon(Icons.auto_awesome, size: 16), label: Text('AI：${state.aiStatus}')),
@@ -193,18 +205,6 @@ class _OverviewPage extends StatelessWidget {
           if (checkedAt.isNotEmpty) Text('检测时间：$checkedAt', style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 4),
           Text('公网 IP 可能变化，不能作为设备永久标识。', style: Theme.of(context).textTheme.bodySmall),
-        ]))),
-        Card(child: ListTile(title: const Text('QQ 官方机器人'), subtitle: Text(qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret'), leading: Icon(qqConfigured ? Icons.check_circle : Icons.info_outline, color: qqConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-        Card(child: ListTile(title: const Text('AI 接口'), subtitle: Text(llmConfigured ? 'API Key 已配置' : '等待填写 API Key'), leading: Icon(llmConfigured ? Icons.check_circle : Icons.info_outline, color: llmConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(qqConfigured && llmConfigured ? '配置已齐全：点击“启动 Runtime”后，应用会依次加载配置、启动服务、连接 QQ，再进入运行状态。' : '首次使用请按顺序完成：1. 填写 AI 接口、模型、Base URL 和 AI 密钥；2. 填写 QQ AppID 与 AppSecret；3. 保存配置；4. 返回这里启动 Runtime。'),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            if (!qqConfigured || !llmConfigured) OutlinedButton.icon(onPressed: onOpenAi, icon: const Icon(Icons.settings), label: const Text('去填写配置')),
-            FilledButton.icon(onPressed: onRestart, icon: const Icon(Icons.play_arrow), label: Text(state.status == RuntimeStatus.online ? '重新启动 Runtime' : '启动 Runtime')),
-          ]),
         ]))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('聊天指令', style: TextStyle(fontWeight: FontWeight.bold)),

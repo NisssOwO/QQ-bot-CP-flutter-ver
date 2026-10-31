@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qq_bot_cp/main.dart';
 
@@ -20,9 +19,8 @@ void main() {
     await tester.pumpWidget(const QqBotCpApp());
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('QQ-bot-CP'), findsOneWidget);
-    expect(find.text('设备公网 IP'), findsOneWidget);
-    expect(find.text('等待填写 AppID 与 AppSecret'), findsOneWidget);
-    await tester.drag(find.byType(ListView).first, const Offset(0, -700));
+    expect(find.text('首次启动说明'), findsOneWidget);
+    expect(find.text('启动 Runtime'), findsOneWidget);
     await tester.pump();
     expect(find.textContaining('API Key'), findsOneWidget);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('qq_bot_cp/runtime'), null);
