@@ -53,6 +53,7 @@ class MainActivity : FlutterActivity() {
                 "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", true).apply(); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
                 "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply(); stopService(Intent(this, RuntimeService::class.java)); launchRuntime("user"); result.success(null) }
                 "getRuntimeState" -> result.success(runtimeState())
+                "getSessionRoleStatus" -> result.success(sessionRoleStatus())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
@@ -246,6 +247,18 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.error("MODEL_LIST_ERROR", error.message ?: "无法获取模型列表", null) }
             }
         }.start()
+    }
+
+    private fun sessionRoleStatus(): Map<String, String> {
+        val file = File(filesDir, "runtime/.dsh-qqbot/session-role-status.json")
+        if (!file.isFile) return emptyMap()
+        return try {
+            val json = JSONObject(file.readText())
+            buildMap {
+                json.optString("private").takeIf { it.isNotBlank() }?.let { put("private", it) }
+                json.optString("group").takeIf { it.isNotBlank() }?.let { put("group", it) }
+            }
+        } catch (_: Exception) { emptyMap() }
     }
 
     private fun parseModelIds(body: String): List<String> {

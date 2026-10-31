@@ -3,6 +3,8 @@ import 'dart:io';
 import '../models/update_manifest.dart';
 import 'background_tasks.dart';
 
+const defaultUpdateManifestUrl = 'https://raw.githubusercontent.com/NisssOwO/QQ-bot-CP-flutter-ver/master/release/manifest-arm64.json';
+
 class UpdateService {
   const UpdateService();
 
