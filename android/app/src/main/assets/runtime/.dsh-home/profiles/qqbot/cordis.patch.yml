@@ -1,4 +1,4 @@
-﻿# Workspace migration patch. Credentials remain in environment variables.
+# Workspace migration patch. Credentials remain in environment variables.
 - insert:
   - id: agent-presets
     name: '@shiny-colors/role-presets'
@@ -48,6 +48,15 @@
     directPrompt: ''
     groupPrompt: ''
     debug: true
+
+- id: bash-sandbox
+  disabled: true
+- id: tool-bash
+  disabled: true
+- id: tool-bash-persistent
+  disabled: true
+- id: tool-pwsh
+  disabled: true
 
 - id: image-offload
   disabled: true
