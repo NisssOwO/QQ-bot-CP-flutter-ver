@@ -8,12 +8,12 @@
 - 应用名称：`QQ-bot-CP`
 - 最低 Android SDK：24（Android 7.0）；目标 SDK：36
 - 当前验证设备：Android 16、`arm64-v8a`
-- 最近一次 Android 16 实机烟测：旧 Debug 包曾完成安装、空配置首页、设置页、角色页和小组件 Provider 检查；最新包等待设备允许 USB 安装后继续验证真实 Runtime。
+- 最近一次 Android 16 实机烟测：最新 Debug 包已完成安装、空配置首页、设置页、角色页和小组件 Provider 检查；真实 Runtime 仍需填写凭据后验收。
 - Flutter 版本：3.47.9 stable
 - JDK：25（版本基线见 `tool/toolchain.json`）
-- 当前 Debug APK：`257,691,752` 字节（约 245.7 MiB）；SHA-256：`34011dfc9954900319a3853cf1a28576f7f74640b8c2025903b039f643c89026`；已安装到 Android 16 真机并验证空配置启动拦截，正式发布前仍需完成最新签名、ABI 和安装升级验收
+- 当前 Debug APK：`257,691,752` 字节（约 245.7 MiB）；SHA-256：`34011dfc9954900319a3853cf1a28576f7f74640b8c2025903b039f643c89026`；已安装到 Android 16 真机并验证空配置启动拦截
 - Release 使用不提交到 Git 的工作区 keystore；不要删除或更换它，否则升级安装会因签名不一致失败
-- 上一份已审计 Release 基线：`200,543,659` 字节（约 191.2 MiB）；SHA-256：`c4a011ee03a18c8303e89477930066529a76a36b2016515e25503233ebdfd5d0`。该值不是当前最新代码的 Release 校验值。
+- 当前签名 Release APK：`167,219,181` 字节（约 159.5 MiB）；SHA-256：`a9f45ac940d40a8c82293aab4e96d43ad1bc5af4385323ba993664911163d6f2`；已通过 Release 隐私审计
 
 ## 构建
 
@@ -23,11 +23,8 @@ $env:Path = "$env:JAVA_HOME\bin;<Flutter SDK 的 bin 目录>;$env:Path"
 flutter pub get
 dart analyze
 flutter test
-Set-Location .\android
-.\gradlew.bat assembleDebug --no-daemon
-# 正式签名 Release（需要本机 android/keystore.properties）
-.\gradlew.bat assembleRelease --no-daemon
-powershell -ExecutionPolicy Bypass -File .\tool\audit-release.ps1
+flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
+powershell -ExecutionPolicy Bypass -File .\tool\audit-release.ps1 -Apk .\build\app\outputs\flutter-apk\app-release.apk
 ```
 
 构建 arm64 专用 Debug APK：
