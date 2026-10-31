@@ -4,9 +4,10 @@
     name: '@shiny-colors/role-presets'
     config:
       roots:
-        - path: ./user-presets
+        - path: ./presets
           trust: user
       includeUserRoot: true
+      default: !!js "process.env.LLM_PRESET || ''"
 
 - id: llm-pi-ai
   config:
@@ -31,6 +32,7 @@
     appSecret: !!js process.env.QQBOT_SECRET
     provider: !!js "process.env.LLM_PROVIDER || 'relay'"
     model: !!js "process.env.LLM_MODEL || ''"
+    preset: !!js "process.env.LLM_PRESET || ''"
     requireMention: true
     textChunkLimit: 4500
     sessionIdleTimeout: 1800000

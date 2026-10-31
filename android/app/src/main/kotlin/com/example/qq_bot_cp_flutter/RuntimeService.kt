@@ -74,6 +74,7 @@ class RuntimeService : Service() {
         fun runtimeEnvironment(): Map<String, String> {
             val credentials = CredentialStore(this@RuntimeService)
             val config = getSharedPreferences("public-config", MODE_PRIVATE)
+            val defaultRole = getSharedPreferences("default-role", MODE_PRIVATE).getString("id", "").orEmpty()
             val protocol = config.getString("protocol", "").orEmpty()
             val api = when (protocol) {
                 "openai-responses" -> "openai-responses"
@@ -91,6 +92,7 @@ class RuntimeService : Service() {
                 "LLM_MODEL" to config.getString("model", "").orEmpty(),
                 "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
                 "LLM_THINKING_LEVEL" to config.getString("thinkingLevel", "medium").orEmpty(),
+                "LLM_PRESET" to defaultRole,
             )
         }
     }
