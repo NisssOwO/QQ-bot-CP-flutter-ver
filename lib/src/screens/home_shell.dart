@@ -135,13 +135,13 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
-      _ConfigPage(bridge: _bridge),
+      _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs),
       _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
     return Scaffold(
-      appBar: AppBar(title: const Text('QQ-bot-CP'), actions: [IconButton(onPressed: _refreshState, icon: const Icon(Icons.refresh))]),
+      appBar: AppBar(title: const Text('QQ-bot-CP'), actions: [IconButton(onPressed: () async { await _refreshState(); await _refreshConfig(); }, tooltip: '刷新状态和配置', icon: const Icon(Icons.refresh))]),
       body: pages[_index],
       floatingActionButton: _index == 0 ? FloatingActionButton.extended(onPressed: _restart, icon: const Icon(Icons.restart_alt), label: const Text('重启 Runtime')) : null,
       bottomNavigationBar: NavigationBar(
@@ -322,8 +322,9 @@ class _LogPageState extends State<_LogPage> {
 }
 
 class _ConfigPage extends StatefulWidget {
-  const _ConfigPage({required this.bridge});
+  const _ConfigPage({required this.bridge, this.onSaved});
   final RuntimeBridge bridge;
+  final VoidCallback? onSaved;
   @override State<_ConfigPage> createState() => _ConfigPageState();
 }
 
@@ -375,6 +376,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     qqConfigured = qqConfigured || enteredSecret.isNotEmpty;
     llmConfigured = llmConfigured || enteredApiKey.isNotEmpty;
     if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
+    widget.onSaved?.call();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
   }
 
@@ -412,21 +414,23 @@ class _ConfigPageState extends State<_ConfigPage> {
         DropdownButtonFormField<int>(value: selectedHistory, decoration: const InputDecoration(labelText: '历史 AI 配置', border: OutlineInputBorder()), items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))], onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); }),
         const SizedBox(height: 20),
       ],
-      _sectionTitle('AI 接口', '接口类型、模型和 Base URL 会用于发送模型请求。'),
+      _sectionTitle('AI 接口', '按填写顺序配置接口类型、地址、模型、思考程度和 API Key。'),
       const SizedBox(height: 10),
       DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
+      const SizedBox(height: 14),
+      _field(baseUrl, 'Base URL', '先填写接口地址，模型列表会从该地址的 /models 拉取', onChanged: (_) => setState(() {})),
+      FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')),
+      if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
       const SizedBox(height: 14),
       if (modelOptions.isNotEmpty) ...[
         DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '已拉取的模型', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
         const SizedBox(height: 14),
       ],
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _field(model, '模型名称', '可手动输入，或先拉取模型列表')), const SizedBox(width: 12), Padding(padding: const EdgeInsets.only(top: 4), child: FilledButton.tonalIcon(onPressed: loadingModels ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型')))]),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _field(model, '模型名称', '可手动输入，也可从上面的 Base URL 拉取')), const SizedBox(width: 12), Padding(padding: const EdgeInsets.only(top: 4), child: FilledButton.tonalIcon(onPressed: loadingModels || baseUrl.text.trim().isEmpty ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型')))]),
       const SizedBox(height: 4),
       DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
       const SizedBox(height: 14),
-      _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写', onChanged: (_) => setState(() {})),
-      FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')),
-      if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+      _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写'),
       const SizedBox(height: 24),
       _sectionTitle('QQ 官方机器人', 'AppID 与 AppSecret 用于连接 QQ 官方机器人服务。'),
       const SizedBox(height: 10),
@@ -434,11 +438,6 @@ class _ConfigPageState extends State<_ConfigPage> {
       _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写'),
       FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
       if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-      const SizedBox(height: 24),
-      _sectionTitle('AI 接口凭据', '密钥只保存到 Android Keystore；输入框留空表示保持原值。'),
-      const SizedBox(height: 10),
-      _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写'),
-      const SizedBox(height: 4),
       SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置'))),
       if (history.isNotEmpty) Center(child: TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置'))),
     ],
