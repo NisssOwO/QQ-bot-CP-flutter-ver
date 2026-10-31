@@ -5,4 +5,8 @@ android/local.properties
 .idea/
 .vscode/
 *.iml
-android/app/src/main/assets/runtime/
+android/app/src/main/assets/runtime/*
+!android/app/src/main/assets/runtime/runtime-entry.mjs
+!android/app/src/main/assets/runtime/.dsh-home/
+release/*.apk
+work/
