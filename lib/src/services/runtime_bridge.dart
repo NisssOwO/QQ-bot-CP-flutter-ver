@@ -64,6 +64,8 @@ class RuntimeBridge {
       nextRetryMs: (raw['nextRetryMs'] as num?)?.toInt() ?? 0,
       qqFailureCount: (raw['qqFailureCount'] as num?)?.toInt() ?? 0,
       aiFailureCount: (raw['aiFailureCount'] as num?)?.toInt() ?? 0,
+      processAlive: raw['processAlive'] == true,
+      userStopped: raw['userStopped'] == true,
     );
   }
 

@@ -15,6 +15,8 @@ class RuntimeState {
     this.nextRetryMs = 0,
     this.qqFailureCount = 0,
     this.aiFailureCount = 0,
+    this.processAlive = false,
+    this.userStopped = false,
   });
 
   final RuntimeStatus status;
@@ -29,6 +31,8 @@ class RuntimeState {
   final int nextRetryMs;
   final int qqFailureCount;
   final int aiFailureCount;
+  final bool processAlive;
+  final bool userStopped;
 
   RuntimeState copyWith({
     RuntimeStatus? status,
@@ -43,6 +47,8 @@ class RuntimeState {
     int? nextRetryMs,
     int? qqFailureCount,
     int? aiFailureCount,
+    bool? processAlive,
+    bool? userStopped,
   }) => RuntimeState(
         status: status ?? this.status,
         phase: phase ?? this.phase,
@@ -56,6 +62,8 @@ class RuntimeState {
         nextRetryMs: nextRetryMs ?? this.nextRetryMs,
         qqFailureCount: qqFailureCount ?? this.qqFailureCount,
         aiFailureCount: aiFailureCount ?? this.aiFailureCount,
+        processAlive: processAlive ?? this.processAlive,
+        userStopped: userStopped ?? this.userStopped,
       );
 }
 

@@ -58,6 +58,20 @@ class _HomeShellState extends State<HomeShell> {
     _refreshState();
     _refreshConfig();
     _refreshPublicIp();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartRuntime());
+  }
+
+  Future<void> _autoStartRuntime() async {
+    if (!mounted) return;
+    try {
+      final config = await _bridge.config();
+      final state = await _bridge.state();
+      // Show the Flutter shell first, then recover a service that was killed by Android,
+      // an APK update, or a task swipe. Respect an explicit user stop.
+      if (config.qqConfigured && config.llmConfigured && !state.processAlive && !state.userStopped && state.status != RuntimeStatus.starting) {
+        await _restart();
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadRecentLogs() async {
