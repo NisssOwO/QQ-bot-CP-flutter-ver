@@ -10,6 +10,9 @@ object RuntimeAssetInstaller {
     fun install(context: Context): File {
         val target = File(context.filesDir, "runtime")
         val prefs = context.getSharedPreferences(RuntimeService.PREFS, Context.MODE_PRIVATE)
+        val ready = prefs.getString("assetVersion", null) == VERSION &&
+            File(target, "bin/node").isFile && File(target, "runtime-entry.mjs").isFile
+        if (ready) return target
         copyTree(context, "runtime", target)
         File(target, "bin/node").setExecutable(true, false)
         prefs.edit().putString("assetVersion", VERSION).apply()
