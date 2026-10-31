@@ -58,6 +58,7 @@ class MainActivity : FlutterActivity() {
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "fetchModels" -> fetchModels(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "testLlmConnection" -> testLlmConnection(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
+                "testLlmRequest" -> testLlmRequest(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getConfigHistory" -> result.success(configHistory())
                 "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
                 "testQqConnection" -> testQqConnection(result)
@@ -316,6 +317,55 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.success(mapOf("ok" to (status in 200..299), "stage" to "模型接口", "message" to message, "statusCode" to status, "elapsedMs" to (System.currentTimeMillis() - started))) }
             } catch (error: Exception) {
                 runOnUiThread { result.success(mapOf("ok" to false, "stage" to "DNS/TLS/网络", "message" to (error.message ?: "无法连接模型接口"), "elapsedMs" to (System.currentTimeMillis() - started))) }
+            }
+        }.start()
+    }
+
+    private fun testLlmRequest(values: Map<*, *>, result: MethodChannel.Result) {
+        val baseUrl = (values["baseUrl"] as? String ?: "").trim().trimEnd('/')
+        val protocol = (values["protocol"] as? String ?: "").trim()
+        val model = (values["model"] as? String ?: "").trim()
+        if (baseUrl.isBlank() || model.isBlank()) { result.error("LLM_REQUEST_CONFIG", "请先填写 Base URL 和模型名称", null); return }
+        Thread {
+            val started = System.currentTimeMillis()
+            try {
+                val suffix = when (protocol) {
+                    "anthropic-messages" -> "/messages"
+                    "openai-responses" -> "/responses"
+                    else -> "/chat/completions"
+                }
+                val endpoint = if (baseUrl.endsWith(suffix)) baseUrl else "$baseUrl$suffix"
+                val suppliedKey = (values["apiKey"] as? String ?: "").trim()
+                val key = suppliedKey.ifBlank { CredentialStore(this@MainActivity).read("llmApiKey") }
+                val body = when (protocol) {
+                    "anthropic-messages" -> org.json.JSONObject()
+                        .put("model", model).put("max_tokens", 1)
+                        .put("messages", org.json.JSONArray().put(org.json.JSONObject().put("role", "user").put("content", "ping")))
+                    "openai-responses" -> org.json.JSONObject().put("model", model).put("input", "ping").put("max_output_tokens", 1)
+                    else -> org.json.JSONObject().put("model", model).put("messages", org.json.JSONArray().put(org.json.JSONObject().put("role", "user").put("content", "ping"))).put("max_tokens", 1).put("stream", false)
+                }
+                val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 20000
+                    doOutput = true
+                    setRequestProperty("Accept", "application/json")
+                    setRequestProperty("Content-Type", "application/json")
+                    if (key.isNotBlank()) setRequestProperty("Authorization", "Bearer $key")
+                }
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                val status = connection.responseCode
+                connection.disconnect()
+                val message = when {
+                    status in 200..299 -> "测试请求成功，模型已返回响应"
+                    status == 401 -> "测试请求拒绝认证：请检查 API Key"
+                    status == 404 -> "测试请求地址不存在：请检查 Base URL 与接口类型"
+                    status == 400 -> "测试请求参数被拒绝：请检查模型名称或接口协议"
+                    else -> "测试请求返回 HTTP $status"
+                }
+                runOnUiThread { result.success(mapOf("ok" to (status in 200..299), "stage" to "模型请求", "message" to message, "statusCode" to status, "elapsedMs" to (System.currentTimeMillis() - started))) }
+            } catch (error: Exception) {
+                runOnUiThread { result.success(mapOf("ok" to false, "stage" to "DNS/TLS/网络", "message" to (error.message ?: "无法连接模型请求接口"), "elapsedMs" to (System.currentTimeMillis() - started))) }
             }
         }.start()
     }

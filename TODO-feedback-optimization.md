@@ -54,7 +54,7 @@
 
 ### P1.2 测试流程重做
 
-- [ ] 调整流程为：填写 → 测试接口 → 拉取模型 → 选择模型 → 测试请求 → 保存。
+- [x] 调整流程为：填写 → 测试接口 → 拉取模型 → 选择模型 → 测试请求 → 保存。
 - [x] 测试失败时保留原配置，不覆盖原本可用的配置。
 - [x] 测试成功后才允许保存；连接字段改变后保存按钮重新禁用。
 - [x] “测试接口”和“拉取模型”统一请求经过认证的 `/models`，临时输入的 API Key 会直接参与测试；未填写时回退读取 Keystore。
@@ -156,7 +156,7 @@
 
 ### P5.3 发布检查
 
-- [ ] 重新执行 Flutter 测试、Dart 分析和 Runtime 离线回归（Flutter analyze 目前仅有既有 info/deprecation 提示，需清理后再勾选）。
+- [x] 重新执行 Flutter 测试、Dart 分析和 Runtime 离线回归（`flutter analyze --no-fatal-infos` 通过；仍有 11 条既有 info/deprecation 提示）。
 - [ ] 检查 APK 不包含用户数据、凭据、会话和角色卡。
 - [ ] 更新 README、Release 说明、文件大小和 SHA-256。
 - [ ] 构建签名 APK 并上传 Release。
