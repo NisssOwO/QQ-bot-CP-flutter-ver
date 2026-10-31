@@ -301,6 +301,7 @@
 - [x] APK ABI、最低 Android 版本和目标版本写入 README。
 - [ ] Release 页面包含更新说明、文件大小和校验值。
 - [x] 最新 arm64 Debug APK 已通过相同隐私/用户数据审计；正式 Release 审计仍需最新签名 Release 产物。
+- [x] `tool/verify-offline.ps1` 已统一执行 Flutter 测试、静态分析、11 项 Runtime 回归、角色/会话隔离和 APK 审计，当前门禁通过。
 - [x] Git 历史未跟踪 Runtime 用户目录，构建目录被忽略；Release 审计通过。
 - [ ] 提供干净安装、升级安装和旧版本迁移说明。
 - [ ] 记录已知限制：系统安装确认、厂商后台限制、网络依赖。
