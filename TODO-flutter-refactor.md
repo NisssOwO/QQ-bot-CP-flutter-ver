@@ -6,7 +6,7 @@
 
 当前排期调整：Android 9 适配和真机验收后置，先完成正常版本功能、Android 16 验证和 Release 发布链路；Android 9 不作为当前阶段阻塞条件。
 
-当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包；总览页已提供启动步骤、当前阶段和预计耗时，最新 APK 已安装到 Android 16 真机，空配置启动拦截验证通过；真实 QQ/Node 启动仍需在应用内填写凭据后验收。
+当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包；总览页已提供启动步骤、当前阶段和预计耗时，最新 APK 已安装到 Android 16 真机，空配置启动拦截验证通过；冷启动页面在该设备约 6–8 秒，烟测脚本已按实际启动时延等待；真实 QQ/Node 启动仍需在应用内填写凭据后验收。
 
 范围调整：
 - 直接重构，不以修复旧版 UI 或旧版原生空指针作为启动条件。
