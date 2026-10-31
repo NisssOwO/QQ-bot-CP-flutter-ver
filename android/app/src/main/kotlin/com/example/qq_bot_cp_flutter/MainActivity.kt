@@ -5,8 +5,11 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
+import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.PowerManager
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -31,6 +34,10 @@ class MainActivity : FlutterActivity() {
     private val backupImportRequest = 2002
     private val roleExportRequest = 2101
     private val roleImportRequest = 2102
+    private var pendingStartResult: MethodChannel.Result? = null
+
+    private val notificationPermission by lazy { NotificationPermissionBinding(this) }
+
 
     override fun onDestroy() {
         ioExecutor.shutdownNow()
@@ -42,8 +49,9 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, methodChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startRuntime" -> { startRuntimeService(); result.success(null) }
+                "requestNotificationPermission" -> requestNotificationPermission(result)
                 "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
-                "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); stopService(Intent(this, RuntimeService::class.java)); startRuntimeService(); result.success(null) }
+                "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); stopService(Intent(this, RuntimeService::class.java)); launchRuntime("user"); result.success(null) }
                 "getRuntimeState" -> result.success(runtimeState())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "getPublicConfig" -> result.success(publicConfig())
@@ -102,15 +110,50 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startRuntimeService() {
-        val intent = Intent(this, RuntimeService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
+        val restricted = RuntimeLauncher.backgroundRestricted(this)
+        getSharedPreferences("runtime", MODE_PRIVATE).edit()
+            .putBoolean("notificationPermissionGranted", hasNotificationPermission())
+            .putBoolean("batteryOptimizationIgnored", batteryOptimizationIgnored())
+            .putBoolean("backgroundRestricted", restricted)
+            .apply()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && batteryOptimizationIgnored().not()) {
+            RuntimeEventBus.emit("warn", "后台", "尚未关闭电池优化，HyperOS 可能在锁屏后结束 Runtime", errorCode = "battery_optimization_enabled")
+        }
+        launchRuntime("foreground")
+    }
+
+    /** Starting from the background is refused by Android 12+, so only the foreground path exists. */
+    private fun runtimeForeground(): Boolean = true
+
+    /**
+     * Starts the runtime, asking for notification permission first so the ongoing
+     * notification is visible from the first second.
+     */
+    private fun requestNotificationPermission(result: MethodChannel.Result) {
+        pendingStartResult?.let { previous -> previous.success("superseded") }
+        pendingStartResult = null
+        result.success(notificationPermission.request())
+    }
+
+    private fun hasNotificationPermission(): Boolean = !NotificationPermission.needed(this)
+
+    private fun batteryOptimizationIgnored(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val manager = getSystemService(PowerManager::class.java) ?: return false
+        return manager.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun launchRuntime(source: String) {
+        val error = RuntimeLauncher.request(this, source) ?: return
+        val message = when (error) {
+            RuntimeLauncher.CODE_RESTRICTED -> "系统禁止后台启动前台服务，请在设置中允许本应用后台运行，再从应用内启动"
+            else -> "无法启动 Runtime：$error"
+        }
+        RuntimeLogRecorder(this).record(RuntimeLogRecorder.Status.FAILED, "runtime.launch", message, 0, error)
     }
 
     private fun markRuntimeStopping(message: String) {
-        getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit()
-            .putString("status", "stopping").putString("phase", "process.stop").putString("message", message).apply()
-        RuntimeEventBus.emit("info", "runtime", "process.stop：$message")
-        RuntimeWidgetProvider.updateAll(this)
+        RuntimeLogRecorder(this).record(RuntimeLogRecorder.Status.STOPPED, "process.stop", message, 0)
     }
 
     private fun openBatteryOptimizationSettings() {
@@ -340,7 +383,7 @@ class MainActivity : FlutterActivity() {
     private fun clearData(values: Map<*, *>) {
         when (values["kind"] as? String) {
             "logs" -> getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().remove("runtimeLastOutput").remove("runtimeLastError").apply()
-            "sessions" -> File(filesDir, "runtime/.dsh-home/sessions").deleteRecursively()
+            "sessions" -> File(filesDir, "runtime/dsh-home/sessions").deleteRecursively()
             "all" -> {
                 CredentialStore(this).clear()
                 getSharedPreferences("public-config", MODE_PRIVATE).edit().clear().apply()

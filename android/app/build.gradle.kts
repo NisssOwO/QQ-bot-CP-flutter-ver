@@ -36,6 +36,11 @@ android {
         versionName = flutter.versionName
     }
 
+    packaging {
+        // libnode.so is executed as a process, so it must be unpacked into nativeLibraryDir.
+        jniLibs.useLegacyPackaging = true
+    }
+
     buildTypes {
         release {
             require(signingPropertiesFile.isFile) { "缺少 android/keystore.properties，不能构建正式签名 Release" }

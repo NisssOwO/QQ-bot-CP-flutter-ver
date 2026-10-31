@@ -3,39 +3,87 @@ package com.shinycolors.officialbot
 import android.content.Context
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class RuntimeProcessController(private val context: Context) {
+    enum class Boot { BOOTED, SILENT, EXITED, NOT_STARTED }
+
     private var process: Process? = null
+    private var booted = CountDownLatch(1)
+    private var exited = CountDownLatch(1)
+    private val recorder = RuntimeLogRecorder(context)
+    private val prefs = context.getSharedPreferences(RuntimeService.PREFS, Context.MODE_PRIVATE)
 
     @Synchronized fun isAlive(): Boolean = process?.isAlive == true
+
+    @Synchronized fun exitCode(): Int? = try {
+        process?.takeIf { !it.isAlive }?.exitValue()
+    } catch (_: IllegalThreadStateException) {
+        null
+    }
 
     @Synchronized fun start(environment: Map<String, String>) {
         if (process?.isAlive == true) return
         val root = File(context.filesDir, "runtime")
-        val bundledNode = File(root, "bin/node")
         val entry = File(root, "runtime-entry.mjs")
-        require(bundledNode.isFile && entry.isFile) { "Runtime bundle is incomplete" }
-        val nativeNode = File(context.applicationInfo.nativeLibraryDir, "libnode.so")
-        val node = if (nativeNode.isFile) nativeNode else stageExecutable(bundledNode)
-        val env = HashMap(System.getenv())
-        env.putAll(environment)
-        env["SHINY_RUNTIME_ROOT"] = root.absolutePath
-        env["SHINY_NODE_BIN"] = node.absolutePath
-        env["LD_LIBRARY_PATH"] = "${File(root, "bin").absolutePath}:${context.applicationInfo.nativeLibraryDir}"
+        require(entry.isFile) { "Runtime bundle is incomplete" }
+        val node = resolveNode(root)
+        booted = CountDownLatch(1)
+        exited = CountDownLatch(1)
         val child = ProcessBuilder(node.absolutePath, entry.absolutePath)
-            .directory(root).redirectErrorStream(false).apply { environment().putAll(env) }.start()
+            .directory(root)
+            .redirectErrorStream(false)
+            .apply { environment().putAll(childEnvironment(root, node, environment)) }
+            .start()
         process = child
-        val prefs = context.getSharedPreferences(RuntimeService.PREFS, Context.MODE_PRIVATE)
-        prefs.edit().putBoolean("runtimeProcessAlive", true).putString("status", "online").apply()
-        Thread { readStream(child.inputStream, "runtimeLastOutput") }.start()
-        Thread { readStream(child.errorStream, "runtimeLastError") }.start()
+        prefs.edit().putBoolean("runtimeProcessAlive", true).apply()
+        Thread { drain(child.inputStream, "stdout") }.start()
+        Thread { drain(child.errorStream, "stderr") }.start()
         Thread {
-            val exit = child.waitFor()
+            val code = child.waitFor()
             val current = synchronized(this@RuntimeProcessController) { process === child }
             if (!current) return@Thread
-            prefs.edit().putBoolean("runtimeProcessAlive", false).putString("status", if (exit == 0) "stopped" else "failed").putInt("runtimeExitCode", exit).apply()
-            RuntimeEventBus.emit(if (exit == 0) "info" else "error", "runtime", "Node/DSH 进程退出，退出码=$exit", errorCode = if (exit == 0) null else "runtime_exit_nonzero")
+            prefs.edit().putBoolean("runtimeProcessAlive", false).putInt("runtimeExitCode", code).apply()
+            exited.countDown()
+            RuntimeEventBus.emit(if (code == 0) "info" else "error", "runtime", "Node/DSH 进程退出，退出码=$code", errorCode = if (code == 0) null else "runtime_exit_nonzero")
+            // Join the readers first by closing our side, then report.
+            try {
+                child.outputStream.close()
+            } catch (_: Exception) {
+            }
+            try {
+                Thread.sleep(300)
+            } catch (_: InterruptedException) {
+            }
+            if (code != 0) {
+                val detail = stderrSample().firstOrNull { it.isNotBlank() } ?: "stderr 为空"
+                recorder.record(RuntimeLogRecorder.Status.FAILED, "runtime.exit", "Node/DSH 进程退出，退出码=$code，首条错误：$detail", 0, "runtime_exit_nonzero")
+            }
         }.start()
+    }
+
+    /** Waits for the entry script's first line so the UI can tell "spawned" from "silently running". */
+    fun boot(): Boot {
+        val signalled = try {
+            booted.await(RuntimeProcessController.BOOT_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        } catch (_: InterruptedException) {
+            return Boot.SILENT
+        }
+        if (signalled) return Boot.BOOTED
+        return if (process?.isAlive == true) Boot.SILENT else Boot.EXITED
+    }
+
+    /**
+     * Node runs from the APK's native library directory, which Android always mounts
+     * executable. The bundled copy is staged only when the native one is missing.
+     */
+    private fun resolveNode(root: File): File {
+        val native = File(context.applicationInfo.nativeLibraryDir, "libnode.so")
+        if (native.isFile) return native
+        val bundled = File(root, "bin/node")
+        require(bundled.isFile) { "Runtime bundle is incomplete" }
+        return stageExecutable(bundled)
     }
 
     private fun stageExecutable(source: File): File {
@@ -48,62 +96,56 @@ class RuntimeProcessController(private val context: Context) {
         return staged
     }
 
-    private fun readStream(stream: java.io.InputStream, key: String) {
-        stream.bufferedReader().useLines { lines -> lines.forEach { line ->
-            val prefs = context.getSharedPreferences(RuntimeService.PREFS, Context.MODE_PRIVATE)
-            val previous = prefs.getString(key, "") ?: ""
-            val next = (if (previous.isEmpty()) line else "$previous\n$line").takeLast(8192)
-            prefs.edit().putString(key, next).apply()
-            val lower = line.lowercase()
-            val level = when {
-                key != "runtimeLastError" -> "info"
-                lower.contains("warning") || lower.contains("warn") -> "warn"
-                else -> "error"
-            }
-            val module = when {
-                lower.contains("plugin") || lower.contains("import") -> "plugin"
-                lower.contains("qqbot") || lower.contains("websocket") || lower.contains("gateway") -> "qq"
-                lower.contains("llm") || lower.contains("provider") || lower.contains("model") -> "ai"
-                lower.contains("network") || lower.contains("dns") || lower.contains("tls") -> "network"
-                lower.contains("session") -> "session"
-                else -> "node"
-            }
-            val errorCode = when {
-                lower.contains("failed to import") -> "plugin_import_failed"
-                lower.contains("missing_credential") -> "missing_credential"
-                lower.contains("connection error") -> "transport_error"
-                else -> null
-            }
-            when (module) {
-                "qq" -> {
-                    val failure = lower.contains("error") || lower.contains("failed") || lower.contains("disconnect")
-                    val connected = lower.contains("ready") || lower.contains("connected") || lower.contains("online")
-                    val editor = prefs.edit().putString("qqStatus", when {
-                        failure -> "异常"
-                        connected -> "在线"
-                        else -> "连接中"
-                    })
-                    if (failure) editor.putInt("qqFailureCount", prefs.getInt("qqFailureCount", 0) + 1)
-                    if (connected) editor.putInt("qqFailureCount", 0)
-                    editor.apply()
-                }
-                "ai" -> {
-                    val failure = lower.contains("error") || lower.contains("failed") || lower.contains("missing_credential")
-                    val connected = lower.contains("ready") || lower.contains("connected")
-                    val editor = prefs.edit().putString("aiStatus", when {
-                        failure -> "异常"
-                        connected -> "在线"
-                        else -> "请求中"
-                    })
-                    if (failure) editor.putInt("aiFailureCount", prefs.getInt("aiFailureCount", 0) + 1)
-                    if (connected) editor.putInt("aiFailureCount", 0)
-                    editor.apply()
-                }
-                "network" -> prefs.edit().putString("networkStatus", if (lower.contains("error") || lower.contains("failed")) "异常" else "连接中").apply()
-            }
-            RuntimeEventBus.emit(level, module, line, errorCode = errorCode)
-        } }
+    /**
+     * Android app processes get a very small environment; PATH, HOME and TMPDIR are
+     * missing, which node and the DSH loader rely on.
+     */
+    private fun childEnvironment(root: File, node: File, extra: Map<String, String>): Map<String, String> {
+        val env = HashMap<String, String>()
+        env["PATH"] = "/system/bin:/system/xbin:/product/bin:/vendor/bin"
+        env["HOME"] = context.filesDir.absolutePath
+        env["TMPDIR"] = context.cacheDir.absolutePath
+        env["TMP"] = context.cacheDir.absolutePath
+        env["TEMP"] = context.cacheDir.absolutePath
+        env["ANDROID_DATA"] = "/data"
+        env["ANDROID_ROOT"] = "/system"
+        env["ANDROID_STORAGE"] = "/storage"
+        env["LANG"] = "en_US.UTF-8"
+        env["LC_ALL"] = "en_US.UTF-8"
+        env.putAll(extra)
+        env["SHINY_RUNTIME_ROOT"] = root.absolutePath
+        env["SHINY_NODE_BIN"] = node.absolutePath
+        env["LD_LIBRARY_PATH"] = "${File(root, "bin").absolutePath}:${context.applicationInfo.nativeLibraryDir}"
+        return env
     }
 
-    @Synchronized fun stop() { process?.destroy(); process = null }
+    private fun drain(stream: java.io.InputStream, source: String) {
+        stream.bufferedReader().useLines { lines ->
+            var captured = 0
+            lines.forEach { line ->
+                if (booted.count > 0) booted.countDown()
+                val parsed = RuntimeLogParser.parse(line, source)
+                recorder.stream(parsed.level, parsed.module, line, parsed.qq, parsed.ai, parsed.network, parsed.errorCode)
+                if (source == "stderr" && captured < 20 && line.isNotBlank()) {
+                    captured++
+                    stderrSample.add(line.take(240))
+                }
+            }
+        }
+    }
+
+    /** The first stderr lines, used to explain a fast exit even after the log history rotates. */
+    fun stderrSample(): List<String> = synchronized(stderrSample) { stderrSample.toList() }
+
+    @Synchronized fun stop() {
+        process?.destroy()
+        process = null
+        exited.countDown()
+        prefs.edit().putBoolean("runtimeProcessAlive", false).apply()
+    }
+
+    val stderrSample = ArrayList<String>()
+    companion object {
+        const val BOOT_TIMEOUT_MS = 20_000L
+    }
 }
