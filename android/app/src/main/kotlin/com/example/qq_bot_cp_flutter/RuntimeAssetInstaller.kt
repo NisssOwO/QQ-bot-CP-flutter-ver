@@ -16,12 +16,14 @@ object RuntimeAssetInstaller {
             refreshEntry(context, target)
             refreshProfile(context, target)
             refreshPiAiManifest(context, target)
+            refreshOpenAiParser(context, target)
             return target
         }
         copyTree(context, "runtime", target)
         refreshEntry(context, target)
         refreshProfile(context, target)
         refreshPiAiManifest(context, target)
+        refreshOpenAiParser(context, target)
         File(target, "bin/node").setExecutable(true, false)
         prefs.edit().putString("assetVersion", VERSION).apply()
         return target
@@ -74,6 +76,20 @@ object RuntimeAssetInstaller {
             }
         } catch (_: Exception) {
             // The runtime will report a precise missing-manifest error if the bundle is incomplete.
+        }
+    }
+
+    /** openai's ChatCompletionStream imports this non-package entry directly at runtime. */
+    private fun refreshOpenAiParser(context: Context, target: File) {
+        val source = "runtime/openai-partial-json-parser/parser.mjs"
+        val output = File(target, "node_modules/openai/_vendor/partial-json-parser/parser.mjs")
+        try {
+            context.assets.open(source).use { input ->
+                output.parentFile?.mkdirs()
+                FileOutputStream(output).use { file -> input.copyTo(file, 16 * 1024) }
+            }
+        } catch (_: Exception) {
+            // An incomplete bundle will report the exact import failure in the Runtime log.
         }
     }
 
