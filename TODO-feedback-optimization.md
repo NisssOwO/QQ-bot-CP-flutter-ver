@@ -156,7 +156,7 @@
 
 ### P5.3 发布检查
 
-- [x] 重新执行 Flutter 测试、Dart 分析和 Runtime 离线回归。
+- [ ] 重新执行 Flutter 测试、Dart 分析和 Runtime 离线回归（Flutter analyze 目前仅有既有 info/deprecation 提示，需清理后再勾选）。
 - [ ] 检查 APK 不包含用户数据、凭据、会话和角色卡。
 - [ ] 更新 README、Release 说明、文件大小和 SHA-256。
 - [ ] 构建签名 APK 并上传 Release。
