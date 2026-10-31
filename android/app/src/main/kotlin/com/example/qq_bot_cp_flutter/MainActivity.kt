@@ -50,8 +50,8 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "startRuntime" -> { startRuntimeService(); result.success(null) }
                 "requestNotificationPermission" -> requestNotificationPermission(result)
-                "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
-                "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); stopService(Intent(this, RuntimeService::class.java)); launchRuntime("user"); result.success(null) }
+                "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", true).apply(); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
+                "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply(); stopService(Intent(this, RuntimeService::class.java)); launchRuntime("user"); result.success(null) }
                 "getRuntimeState" -> result.success(runtimeState())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "getPublicConfig" -> result.success(publicConfig())
@@ -93,10 +93,13 @@ class MainActivity : FlutterActivity() {
 
     private fun runtimeState(): Map<String, Any?> {
         val prefs = getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE)
+        val processAlive = prefs.getBoolean("runtimeProcessAlive", false) && RuntimeService.serviceAlive
+        val persistedStatus = prefs.getString("status", "stopped") ?: "stopped"
+        val status = if (!processAlive && persistedStatus == "online") "stopped" else persistedStatus
         return mapOf(
-            "status" to prefs.getString("status", "stopped"),
+            "status" to status,
             "phase" to prefs.getString("phase", "未启动"),
-            "message" to prefs.getString("message", ""),
+            "message" to if (!processAlive && persistedStatus == "online") "Runtime 进程未运行" else prefs.getString("message", ""),
             "elapsedMs" to prefs.getLong("elapsedMs", 0L),
             "exitCode" to null,
             "qqStatus" to prefs.getString("qqStatus", "未知"),
@@ -106,10 +109,13 @@ class MainActivity : FlutterActivity() {
             "nextRetryMs" to prefs.getLong("nextRetryMs", 0L),
             "qqFailureCount" to prefs.getInt("qqFailureCount", 0),
             "aiFailureCount" to prefs.getInt("aiFailureCount", 0),
+            "processAlive" to processAlive,
+            "userStopped" to prefs.getBoolean("userStopped", false),
         )
     }
 
     private fun startRuntimeService() {
+        getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply()
         val restricted = RuntimeLauncher.backgroundRestricted(this)
         getSharedPreferences("runtime", MODE_PRIVATE).edit()
             .putBoolean("notificationPermissionGranted", hasNotificationPermission())

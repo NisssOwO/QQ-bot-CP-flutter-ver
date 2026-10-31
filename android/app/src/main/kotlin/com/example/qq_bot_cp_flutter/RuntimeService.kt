@@ -12,6 +12,7 @@ import android.os.Looper
 class RuntimeService : Service() {
     companion object {
         const val PREFS = "runtime"
+        @Volatile var serviceAlive: Boolean = false
         const val ACTION_START = "com.shinycolors.officialbot.action.START_RUNTIME"
         const val EXTRA_SOURCE = "source"
         const val CODE_START_FAILED = "runtime_start_failed"
@@ -25,6 +26,7 @@ class RuntimeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceAlive = true
         RuntimeEventBus.setContext(this)
         coordinator = RuntimeCoordinator(this) { RuntimeProcessController(this) }
         val notifier = RuntimeNotifier(this)
@@ -45,6 +47,7 @@ class RuntimeService : Service() {
     }
 
     override fun onDestroy() {
+        serviceAlive = false
         networkCallback?.let { callback ->
             try {
                 getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(callback)
