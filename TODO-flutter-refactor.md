@@ -6,7 +6,7 @@
 
 当前排期调整：Android 9 适配和真机验收后置，先完成正常版本功能、Android 16 验证和 Release 发布链路；Android 9 不作为当前阶段阻塞条件。
 
-当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包；总览页已提供启动步骤、当前阶段和预计耗时，最新 APK 已构建并通过用户数据审计，但设备端 USB 安装权限尚未放行，因此真实 QQ/Node 启动仍待真机验收。
+当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包；总览页已提供启动步骤、当前阶段和预计耗时，最新 APK 已安装到 Android 16 真机，空配置启动拦截验证通过；真实 QQ/Node 启动仍需在应用内填写凭据后验收。
 
 范围调整：
 - 直接重构，不以修复旧版 UI 或旧版原生空指针作为启动条件。
@@ -267,7 +267,7 @@
 
 - [ ] Android 9 arm64：冷启动、空配置、配置保存、Runtime 启停、重启、锁屏。
 - [ ] Android 9：Wi-Fi 断开/恢复、移动网络切换、DNS 失败、TLS 失败。
-- [x] Android 16 arm64：旧 Debug 包已实机验证安装、冷启动、空配置首页、设置页、角色页、包名/ABI 和小组件 Provider 注册；最新 Debug 包已构建，但当前设备拒绝 USB 安装，真实 Runtime 启动验收待继续。
+- [x] Android 16 arm64：最新 Debug 包已实机安装、冷启动并验证启动引导、空配置启动拦截；旧包已验证设置页、角色页、包名/ABI 和小组件 Provider 注册。真实 Runtime 启动需先填写凭据。
 - [ ] MIUI/HyperOS：省电限制、自动启动、后台冻结、通知权限。
 
 ### 功能
