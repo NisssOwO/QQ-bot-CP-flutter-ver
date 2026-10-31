@@ -8,6 +8,7 @@ class RuntimeState {
     this.message = '',
     this.elapsedMs = 0,
     this.exitCode,
+    this.errorCode,
     this.qqStatus = '未知',
     this.aiStatus = '未知',
     this.networkStatus = '未知',
@@ -24,6 +25,7 @@ class RuntimeState {
   final String message;
   final int elapsedMs;
   final int? exitCode;
+  final String? errorCode;
   final String qqStatus;
   final String aiStatus;
   final String networkStatus;
@@ -40,6 +42,7 @@ class RuntimeState {
     String? message,
     int? elapsedMs,
     int? exitCode,
+    String? errorCode,
     String? qqStatus,
     String? aiStatus,
     String? networkStatus,
@@ -55,6 +58,7 @@ class RuntimeState {
         message: message ?? this.message,
         elapsedMs: elapsedMs ?? this.elapsedMs,
         exitCode: exitCode ?? this.exitCode,
+        errorCode: errorCode ?? this.errorCode,
         qqStatus: qqStatus ?? this.qqStatus,
         aiStatus: aiStatus ?? this.aiStatus,
         networkStatus: networkStatus ?? this.networkStatus,

@@ -31,6 +31,7 @@ class RuntimeLogRecorder(private val context: Context) {
                 .putString("phase", phase)
                 .putString("message", message)
                 .putLong("elapsedMs", elapsedMs)
+                .putString("errorCode", errorCode.orEmpty())
                 .commit()
             RuntimeEventBus.emit(if (status == Status.FAILED) "error" else "info", "runtime", "$phase：$message", elapsedMs.takeIf { it > 0 }, errorCode)
             RuntimeWidgetProvider.updateAll(context)
