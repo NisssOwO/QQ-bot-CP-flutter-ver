@@ -39,12 +39,28 @@ Invoke-Adb @('shell', 'input', 'swipe', '1800', '1300', '1800', '350', '500') | 
 Start-Sleep -Seconds 1
 Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
 $settingsUi = Invoke-Adb @('shell', 'cat', $uiPath)
+if ($settingsUi -notmatch '更新清单 URL') {
+  Invoke-Adb @('shell', 'input', 'swipe', '1800', '1300', '1800', '300', '500') | Out-Null
+  Start-Sleep -Seconds 1
+  Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
+  $settingsUi = Invoke-Adb @('shell', 'cat', $uiPath)
+}
 foreach ($text in @('设置', '更新清单 URL', '配置备份')) { if ($settingsUi -notmatch [regex]::Escape($text)) { throw "设置页缺少关键文案：$text" } }
 Invoke-Adb @('shell', 'input', 'tap', '1792', '1488') | Out-Null
 Start-Sleep -Seconds 1
 Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
 $rolesUi = Invoke-Adb @('shell', 'cat', $uiPath)
 foreach ($text in @('角色', '角色管理', '新建角色')) { if ($rolesUi -notmatch [regex]::Escape($text)) { throw "角色页缺少关键文案：$text" } }
+Invoke-Adb @('shell', 'input', 'tap', '768', '1488') | Out-Null
+Start-Sleep -Seconds 1
+Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
+$aiTop = Invoke-Adb @('shell', 'cat', $uiPath)
+foreach ($text in @('拉取模型', '思考程度')) { if ($aiTop -notmatch [regex]::Escape($text)) { throw "AI 配置页缺少关键文案：$text" } }
+Invoke-Adb @('shell', 'input', 'swipe', '1800', '1300', '1800', '400', '500') | Out-Null
+Start-Sleep -Seconds 1
+Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
+$aiUi = Invoke-Adb @('shell', 'cat', $uiPath)
+if ($aiUi -notmatch 'AI API Key') { throw 'AI 配置页缺少关键文案：AI API Key' }
 $receivers = Invoke-Adb @('shell', 'dumpsys', 'package', 'com.shinycolors.officialbot')
 if ($receivers -notmatch 'RuntimeWidgetProvider') { throw 'RuntimeWidgetProvider 未注册' }
 Write-Output 'PASS Android 16 arm64 smoke test'
