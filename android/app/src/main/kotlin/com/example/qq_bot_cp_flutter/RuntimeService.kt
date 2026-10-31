@@ -142,6 +142,7 @@ class RuntimeService : Service() {
             "LLM_API" to api,
             "LLM_MODEL" to config.getString("model", "").orEmpty(),
             "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
+            "LLM_THINKING_LEVEL" to config.getString("thinkingLevel", "medium").orEmpty(),
         )
     }
 

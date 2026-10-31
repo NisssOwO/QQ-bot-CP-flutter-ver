@@ -311,13 +311,16 @@ class _ConfigPageState extends State<_ConfigPage> {
   bool testingQq = false;
   bool qqConfigured = false;
   bool llmConfigured = false;
+  String thinkingLevel = 'medium';
+  List<String> modelOptions = const [];
+  bool loadingModels = false;
 
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { for (final c in [protocol, model, baseUrl, appId, secret, apiKey]) { c.dispose(); } super.dispose(); }
   Future<void> _load() async {
-    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured; history = await widget.bridge.configHistory(); }
+    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; thinkingLevel = c.thinkingLevel; qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured; history = await widget.bridge.configHistory(); }
     finally { if (mounted) setState(() => loading = false); }
   }
   Future<void> _save() async {
@@ -329,7 +332,7 @@ class _ConfigPageState extends State<_ConfigPage> {
         return;
       }
     }
-    await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), appId: appId.text.trim(), secret: secret.text, apiKey: apiKey.text);
+    await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: thinkingLevel, appId: appId.text.trim(), secret: secret.text, apiKey: apiKey.text);
     final nextHistory = await widget.bridge.configHistory();
     secret.clear(); apiKey.clear();
     if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
@@ -347,6 +350,16 @@ class _ConfigPageState extends State<_ConfigPage> {
     final result = await widget.bridge.testQqConnection();
     if (mounted) setState(() { testingQq = false; qqTest = result; });
   }
+  Future<void> _fetchModels() async {
+    if (baseUrl.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写 Base URL'))); return; }
+    setState(() => loadingModels = true);
+    try {
+      final models = await widget.bridge.fetchModels(baseUrl.text.trim());
+      if (mounted) setState(() { modelOptions = models; if (models.contains(model.text.trim())) model.text = model.text.trim(); });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(models.isEmpty ? '接口没有返回可用模型' : '已拉取 ${models.length} 个模型')));
+    } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('拉取模型失败：$error'))); }
+    finally { if (mounted) setState(() => loadingModels = false); }
+  }
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -357,7 +370,9 @@ class _ConfigPageState extends State<_ConfigPage> {
     ],
     DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
     const SizedBox(height: 12),
-    _field(model, '模型名称', '留空，填写后才会调用模型'),
+    if (modelOptions.isNotEmpty) DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '模型名称（拉取列表）', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
+    Row(children: [Expanded(child: _field(model, '模型名称', '可手动输入，也可先点击“拉取模型”选择')), const SizedBox(width: 8), FilledButton.tonalIcon(onPressed: loadingModels ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型'))]),
+    DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
     _field(baseUrl, 'Base URL', '留空，使用中转或官方接口时填写', onChanged: (_) => setState(() {})),
     Row(children: [Expanded(child: FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')))]),
     if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
@@ -366,6 +381,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     _field(secret, 'QQ AppSecret', qqConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
     FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
     if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+    const Padding(padding: EdgeInsets.only(top: 8, bottom: 4), child: Text('AI 接口凭据', style: TextStyle(fontWeight: FontWeight.bold))),
     _field(apiKey, 'AI API Key', llmConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
     const SizedBox(height: 8),
     FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置')),
@@ -542,7 +558,9 @@ class _RolePageState extends State<_RolePage> {
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
     const Text('角色管理', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8),
-    const Text('参考旧项目角色卡格式：角色 ID、显示名称和人格提示词。内置和自定义角色都可以编辑、删除和设为默认。', style: TextStyle(color: Colors.white60)),
+    const Text('角色卡决定模型的说话方式和行为边界。先新建或选择角色，编辑完成后必须点击“保存角色卡”；切换角色请在 QQ 对话中使用 /preset。', style: TextStyle(color: Colors.white60)),
+    const SizedBox(height: 8),
+    const Card(child: Padding(padding: EdgeInsets.all(12), child: Text('填写建议：角色 ID 只能使用 custom.xxx 或已有内置 ID；显示名称用于列表展示；人格提示词建议写清身份、语气、行为规则、禁止事项和回复格式。提示词为空时不会保存。', style: TextStyle(color: Colors.white70)))),
     const SizedBox(height: 16),
     Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _newRole, icon: const Icon(Icons.add), label: const Text('新建角色'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload_file), label: const Text('导出 JSON')))]),
     const SizedBox(height: 12),
@@ -551,11 +569,11 @@ class _RolePageState extends State<_RolePage> {
     const SizedBox(height: 16),
     const Text('角色编辑', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
     const SizedBox(height: 8),
-    TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', hintText: 'custom.my-role 或已有内置角色 ID', border: OutlineInputBorder())),
+    TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', helperText: '自定义角色用 custom.xxx；内置角色直接编辑原 ID', hintText: 'custom.my-role', border: OutlineInputBorder())),
     const SizedBox(height: 8),
-    TextField(controller: roleName, enabled: !loading, decoration: const InputDecoration(labelText: '显示名称', hintText: '例如：七草日花', border: OutlineInputBorder())),
+    TextField(controller: roleName, enabled: !loading, decoration: const InputDecoration(labelText: '显示名称', helperText: '用户在角色列表和提示中看到的名称', hintText: '例如：七草日花', border: OutlineInputBorder())),
     const SizedBox(height: 12),
-    TextField(controller: rolePrompt, enabled: !loading, minLines: 10, maxLines: 20, decoration: const InputDecoration(labelText: '人格提示词', hintText: '填写默认角色的人格、语气、行为规则和边界', alignLabelWithHint: true, border: OutlineInputBorder())),
+    TextField(controller: rolePrompt, enabled: !loading, minLines: 12, maxLines: 24, decoration: const InputDecoration(labelText: '人格提示词', helperText: '可滚动编辑；建议包含身份、性格、语气、行为规则、边界和示例回复', hintText: '你是谁？如何说话？哪些内容必须拒绝？', alignLabelWithHint: true, border: OutlineInputBorder())),
     const SizedBox(height: 12),
     Row(children: [Expanded(child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存角色卡'))), const SizedBox(width: 8), IconButton(tooltip: '设为默认角色', onPressed: loading ? null : _setDefault, icon: Icon(defaultId == roleId.text ? Icons.star : Icons.star_border)), IconButton(tooltip: '删除角色', onPressed: loading ? null : _delete, icon: const Icon(Icons.delete_outline))]),
     const SizedBox(height: 16),
