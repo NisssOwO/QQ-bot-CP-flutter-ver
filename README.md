@@ -68,6 +68,29 @@ powershell -ExecutionPolicy Bypass -File .\tool\verify-offline.ps1
 
 APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
 
+## 安装与迁移
+
+### 干净安装
+
+1. 在 Android 手机上安装签名 APK。
+2. 首次打开后，进入“AI”和“设置”页面填写接口、QQ Bot 和更新清单配置。
+3. 角色卡从“角色”页新建或导入；空配置不会自动启动 Runtime。
+
+### 升级安装
+
+使用相同签名的新版本直接覆盖安装，Android 会保留应用私有数据、Keystore 凭据、角色卡和会话目录。安装前先停止 Runtime；安装完成后重新打开应用并检查设置页状态。
+
+### 旧版迁移
+
+在旧版导出脱敏 JSON 后，在新版“设置 → 配置备份”导入。迁移只接受公开 AI 配置、主题和 `custom.*` 角色卡；AppID、AppSecret、API Key 和会话记录不会从旧备份导入，需要在新版重新填写。
+
+### 已知限制
+
+- 当前主验证设备为 Android 16 arm64；Android 9 适配已后置。
+- 真实 QQ WebSocket、AI 请求、锁屏长时间运行和断网恢复需要对应账号、网络和设备条件验收。
+- APK 安装仍由 Android 系统安装器确认，未知来源权限由系统管理。
+- 当前 Release 签名构建受 Flutter AOT 中文路径兼容性影响，发布前需使用 ASCII 临时构建路径。
+
 Runtime Bundle 不作为普通 Git 文件提交。准备干净 Runtime 时执行：
 
 ```powershell
