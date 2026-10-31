@@ -40,8 +40,9 @@ class PublicIpService {
       if (response.statusCode != 200) return null;
       final body = await response.transform(utf8.decoder).join();
       final decoded = jsonDecode(body);
-      if (decoded is Map && decoded['ip'] is String)
+      if (decoded is Map && decoded['ip'] is String) {
         return decoded['ip'] as String;
+      }
       return null;
     } catch (_) {
       return null;
