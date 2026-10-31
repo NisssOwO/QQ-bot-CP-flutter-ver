@@ -58,6 +58,7 @@ class RuntimeBridge {
       message: '${raw['message'] ?? ''}',
       elapsedMs: (raw['elapsedMs'] as num?)?.toInt() ?? 0,
       exitCode: (raw['exitCode'] as num?)?.toInt(),
+      errorCode: raw['errorCode'] as String?,
       qqStatus: '${raw['qqStatus'] ?? '未知'}',
       aiStatus: '${raw['aiStatus'] ?? '未知'}',
       networkStatus: '${raw['networkStatus'] ?? '未知'}',

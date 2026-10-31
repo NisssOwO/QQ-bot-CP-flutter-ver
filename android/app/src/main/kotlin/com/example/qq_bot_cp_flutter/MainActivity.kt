@@ -103,6 +103,7 @@ class MainActivity : FlutterActivity() {
             "message" to if (!processAlive && persistedStatus == "online") "Runtime 进程未运行" else prefs.getString("message", ""),
             "elapsedMs" to prefs.getLong("elapsedMs", 0L),
             "exitCode" to null,
+            "errorCode" to prefs.getString("errorCode", "").orEmpty().ifBlank { null },
             "qqStatus" to prefs.getString("qqStatus", "未知"),
             "aiStatus" to prefs.getString("aiStatus", "未知"),
             "networkStatus" to prefs.getString("networkStatus", "未知"),

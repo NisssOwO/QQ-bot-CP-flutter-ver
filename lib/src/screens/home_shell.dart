@@ -208,6 +208,7 @@ class _OverviewPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(cacheExtent: 5000, padding: const EdgeInsets.fromLTRB(16, 16, 16, 144), children: [
         Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state, startupDurations)), trailing: Text(_formatDuration(state.elapsedMs)))),
+        if (state.status == RuntimeStatus.failed) Card(child: ListTile(leading: Icon(Icons.error_outline, color: AppThemeTokens.of(context).error), title: Text('启动失败：${state.phase}'), subtitle: Text('${state.message.isEmpty ? '请打开日志查看详细信息' : state.message}${state.errorCode == null ? '' : '（错误码 ${state.errorCode}）'}${state.exitCode == null ? '' : '（退出码 ${state.exitCode}）'}\n建议：检查配置、网络和日志中的错误码后重试。'))),
         Card(child: ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('启动耗时统计'), subtitle: Text(startupDurations.isEmpty ? '暂无完整启动记录，下一次启动后开始统计' : '最近一次：${_formatDuration(startupDurations.last)} · 历史平均：${_formatDuration((startupDurations.reduce((a, b) => a + b) / startupDurations.length).round())} · 样本 ${startupDurations.length} 次'))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -469,6 +470,19 @@ class _ConfigPageState extends State<_ConfigPage> {
     final result = await widget.bridge.testQqConnection();
     if (mounted) setState(() { testingQq = false; qqTest = result; });
   }
+  Future<void> _copyEndpointDiagnostic() async {
+    final result = endpointTest;
+    if (result == null) return;
+    final details = [
+      '接口测试诊断',
+      '阶段：${result.stage}',
+      if (result.statusCode != null) 'HTTP：${result.statusCode}',
+      if (result.elapsedMs != null) '耗时：${result.elapsedMs} ms',
+      '结果：${result.message}',
+    ].join('\n');
+    await Clipboard.setData(ClipboardData(text: details));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制接口诊断（未包含 API Key）')));
+  }
   Future<void> _fetchModels() async {
     if (baseUrl.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写 Base URL'))); return; }
     setState(() => loadingModels = true);
@@ -499,7 +513,7 @@ class _ConfigPageState extends State<_ConfigPage> {
       _field(baseUrl, 'Base URL', '先填写接口地址，模型列表会从该地址的 /models 拉取', onChanged: (_) => setState(() {})),
       _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() {})),
       FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')),
-      if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+      if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))), if (!endpointTest!.ok) TextButton.icon(onPressed: _copyEndpointDiagnostic, icon: const Icon(Icons.copy, size: 16), label: const Text('复制诊断'))])),
       const SizedBox(height: 14),
       if (modelOptions.isNotEmpty) ...[
         DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '已拉取的模型', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
