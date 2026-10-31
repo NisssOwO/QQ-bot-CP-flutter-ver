@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import '../models/endpoint_test_result.dart';
 import '../models/public_config.dart';
 import '../models/runtime_log.dart';
 import '../models/runtime_state.dart';
@@ -88,7 +89,11 @@ class RuntimeBridge {
         'thinkingLevel': thinkingLevel, 'appId': appId, 'secret': secret, 'apiKey': apiKey,
       });
 
-  Future<List<String>> fetchModels(String baseUrl) async => (await _call<List<dynamic>>('fetchModels', {'baseUrl': baseUrl}, const Duration(seconds: 20)))?.whereType<String>().toList() ?? const [];
+  Future<List<String>> fetchModels(String baseUrl, {String apiKey = ''}) async => (await _call<List<dynamic>>('fetchModels', {'baseUrl': baseUrl, 'apiKey': apiKey}, const Duration(seconds: 20)))?.whereType<String>().toList() ?? const [];
+  Future<EndpointTestResult> testLlmConnection(String baseUrl, {String apiKey = ''}) async {
+    final raw = (await _call<Map<dynamic, dynamic>>('testLlmConnection', {'baseUrl': baseUrl, 'apiKey': apiKey}, const Duration(seconds: 20)))?.map((key, value) => MapEntry('$key', value)) ?? <String, dynamic>{};
+    return EndpointTestResult(ok: raw['ok'] == true, stage: '${raw['stage'] ?? 'HTTP'}', message: '${raw['message'] ?? '接口测试失败'}', statusCode: (raw['statusCode'] as num?)?.toInt(), elapsedMs: (raw['elapsedMs'] as num?)?.toInt());
+  }
 
   Future<List<AiConfigHistory>> configHistory() async {
     final raw = await _call<List<dynamic>>('getConfigHistory', null, const Duration(seconds: 12), 2) ?? const [];

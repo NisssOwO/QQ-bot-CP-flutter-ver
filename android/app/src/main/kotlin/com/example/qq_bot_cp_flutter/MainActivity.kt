@@ -57,6 +57,7 @@ class MainActivity : FlutterActivity() {
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "fetchModels" -> fetchModels(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
+                "testLlmConnection" -> testLlmConnection(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getConfigHistory" -> result.success(configHistory())
                 "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
                 "testQqConnection" -> testQqConnection(result)
@@ -228,7 +229,8 @@ class MainActivity : FlutterActivity() {
                     connectTimeout = 8000
                     readTimeout = 12000
                     setRequestProperty("Accept", "application/json")
-                    val key = CredentialStore(this@MainActivity).read("llmApiKey")
+                    val suppliedKey = (values["apiKey"] as? String ?: "").trim()
+                    val key = suppliedKey.ifBlank { CredentialStore(this@MainActivity).read("llmApiKey") }
                     if (key.isNotBlank()) setRequestProperty("Authorization", "Bearer $key")
                 }
                 val status = connection.responseCode
@@ -245,6 +247,37 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.success(models) }
             } catch (error: Exception) {
                 runOnUiThread { result.error("MODEL_LIST_ERROR", error.message ?: "无法获取模型列表", null) }
+            }
+        }.start()
+    }
+
+    private fun testLlmConnection(values: Map<*, *>, result: MethodChannel.Result) {
+        val baseUrl = (values["baseUrl"] as? String ?: "").trim().trimEnd('/')
+        if (baseUrl.isBlank()) { result.error("LLM_TEST_CONFIG", "请先填写 Base URL", null); return }
+        Thread {
+            val started = System.currentTimeMillis()
+            try {
+                val endpoint = if (baseUrl.endsWith("/models")) baseUrl else "$baseUrl/models"
+                val suppliedKey = (values["apiKey"] as? String ?: "").trim()
+                val key = suppliedKey.ifBlank { CredentialStore(this@MainActivity).read("llmApiKey") }
+                val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 12000
+                    setRequestProperty("Accept", "application/json")
+                    if (key.isNotBlank()) setRequestProperty("Authorization", "Bearer $key")
+                }
+                val status = connection.responseCode
+                connection.disconnect()
+                val message = when {
+                    status in 200..299 -> "模型接口可用，认证通过"
+                    status == 401 -> "模型接口拒绝认证：API Key 无效、未保存或不适用于此接口"
+                    status == 404 -> "接口不提供 /models，请检查 Base URL"
+                    else -> "模型接口返回 HTTP $status"
+                }
+                runOnUiThread { result.success(mapOf("ok" to (status in 200..299), "stage" to "模型接口", "message" to message, "statusCode" to status, "elapsedMs" to (System.currentTimeMillis() - started))) }
+            } catch (error: Exception) {
+                runOnUiThread { result.success(mapOf("ok" to false, "stage" to "DNS/TLS/网络", "message" to (error.message ?: "无法连接模型接口"), "elapsedMs" to (System.currentTimeMillis() - started))) }
             }
         }.start()
     }
