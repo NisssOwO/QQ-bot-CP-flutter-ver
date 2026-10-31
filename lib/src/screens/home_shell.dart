@@ -97,6 +97,14 @@ class _HomeShellState extends State<HomeShell> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('尚未启动：请先填写 ${missing.join('、')}')));
         return;
       }
+      final permission = await _bridge.requestNotificationPermission();
+      if (permission == 'denied' && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('通知权限被拒绝，Runtime 仍会启动，但看不到常驻通知。'),
+          action: SnackBarAction(label: '去设置', onPressed: () => _bridge.openNotificationSettings()),
+        ));
+      }
+      setState(() => _state = _state.copyWith(status: RuntimeStatus.starting, phase: 'restart.begin', message: '正在启动 Runtime'));
       await _bridge.restart();
       await _refreshState();
     } catch (error) {

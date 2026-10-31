@@ -38,6 +38,10 @@ class RuntimeBridge {
   Future<List<RuntimeLogEntry>> recentLogs() async => (await _call<List<dynamic>>('getRecentLogs', null, const Duration(seconds: 12), 2) ?? const []).whereType<Map>().map(_parseLog).toList();
 
   Future<void> start() async { await _call<void>('startRuntime'); }
+
+  /// Asks for the notification permission Android 13+ needs before the ongoing
+  /// service notification can be shown. Returns granted, denied, unavailable or superseded.
+  Future<String> requestNotificationPermission() async => await _call<String>('requestNotificationPermission') ?? 'unavailable';
   Future<void> stop() async { await _call<void>('stopRuntime'); }
   Future<void> restart() async { await _call<void>('restartRuntime', null, const Duration(seconds: 20)); }
 
