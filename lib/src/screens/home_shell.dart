@@ -377,6 +377,11 @@ class _ConfigPageState extends State<_ConfigPage> {
   bool loadingModels = false;
   bool endpointValidated = false;
   String testedConnection = '';
+  String savedProtocol = '';
+  String savedModel = '';
+  String savedBaseUrl = '';
+  String savedThinkingLevel = 'medium';
+  String savedAppId = '';
   static const _savedMask = '••••••••';
 
   @override
@@ -384,8 +389,19 @@ class _ConfigPageState extends State<_ConfigPage> {
   @override
   void dispose() { for (final c in [protocol, model, baseUrl, appId, secret, apiKey]) { c.dispose(); } super.dispose(); }
   Future<void> _load() async {
-    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; thinkingLevel = c.thinkingLevel; qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured; if (qqConfigured) secret.text = _savedMask; if (llmConfigured) apiKey.text = _savedMask; history = await widget.bridge.configHistory(); }
+    try {
+      final c = await widget.bridge.config();
+      protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; thinkingLevel = c.thinkingLevel;
+      savedProtocol = c.protocol; savedModel = c.model; savedBaseUrl = c.baseUrl; savedAppId = c.appId; savedThinkingLevel = c.thinkingLevel;
+      qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured;
+      secret.text = qqConfigured ? _savedMask : ''; apiKey.text = llmConfigured ? _savedMask : '';
+      history = await widget.bridge.configHistory();
+    }
     finally { if (mounted) setState(() => loading = false); }
+  }
+  Future<void> _restoreSavedConfig() async {
+    if (mounted) setState(() { loading = true; endpointValidated = false; testedConnection = ''; endpointTest = null; });
+    await _load();
   }
   Future<void> _save() async {
     final url = baseUrl.text.trim();
@@ -408,6 +424,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     if (apiKey.text.isNotEmpty) apiKey.text = _savedMask;
     qqConfigured = qqConfigured || enteredSecret.isNotEmpty;
     llmConfigured = llmConfigured || enteredApiKey.isNotEmpty;
+    savedProtocol = protocol.text.trim(); savedModel = model.text.trim(); savedBaseUrl = baseUrl.text.trim(); savedAppId = appId.text.trim(); savedThinkingLevel = thinkingLevel;
     if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
     widget.onSaved?.call();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
@@ -469,12 +486,14 @@ class _ConfigPageState extends State<_ConfigPage> {
       DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
       const SizedBox(height: 14),
       Text(_connectionReady ? '✓ AI 接口认证测试通过，可以保存配置。' : '保存 AI 配置前，请先测试接口；测试失败不会覆盖旧配置。', style: TextStyle(color: _connectionReady ? AppThemeTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 6),
+      Row(children: [Expanded(child: Text(_hasUnsavedChanges ? '当前页面有未保存修改' : '当前内容与已保存配置一致', style: TextStyle(color: _hasUnsavedChanges ? AppThemeTokens.of(context).warning : Theme.of(context).colorScheme.onSurfaceVariant))), if (_hasUnsavedChanges) TextButton.icon(onPressed: loading ? null : _restoreSavedConfig, icon: const Icon(Icons.undo), label: const Text('恢复已保存'))]),
       const SizedBox(height: 8),
       const SizedBox(height: 24),
       _sectionTitle('QQ 官方机器人', 'AppID 与 AppSecret 用于连接 QQ 官方机器人服务。'),
       const SizedBox(height: 10),
-      _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
-      _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写'),
+      _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置', onChanged: (_) => setState(() {})),
+      _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() {})),
       FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
       if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
       SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading || (_needsLlmValidation && !_connectionReady) ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置'))),
@@ -495,6 +514,7 @@ class _ConfigPageState extends State<_ConfigPage> {
 
   bool get _needsLlmValidation => baseUrl.text.trim().isNotEmpty || llmConfigured || _credentialValue(apiKey).isNotEmpty;
   bool get _connectionReady => endpointValidated && testedConnection == _connectionFingerprint;
+  bool get _hasUnsavedChanges => protocol.text.trim() != savedProtocol || model.text.trim() != savedModel || baseUrl.text.trim() != savedBaseUrl || thinkingLevel != savedThinkingLevel || appId.text.trim() != savedAppId || (apiKey.text.isNotEmpty && apiKey.text != _savedMask) || (secret.text.isNotEmpty && secret.text != _savedMask);
 
   Future<void> _clearHistory() async {
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('清除历史配置？'), content: const Text('只会删除接口类型、模型和 Base URL 历史，不会删除已保存的密钥。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('清除'))])) ?? false;
