@@ -11,9 +11,9 @@
 - 最近一次 Android 16 实机烟测：最新 Debug 包已完成安装、空配置首页、设置页、角色页和小组件 Provider 检查；真实 Runtime 仍需填写凭据后验收。
 - Flutter 版本：3.47.9 stable
 - JDK：25（版本基线见 `tool/toolchain.json`）
-- 当前 Debug APK：约 `245,470,237` 字节；角色 preset、Android Runtime 自动恢复和不兼容工具禁用已在 Android 16 真机验证
+- 当前 Debug APK：约 `276,024,072` 字节；角色 preset、Android Runtime 自动恢复和不兼容工具禁用已在 Android 16 真机验证
 - Release 使用不提交到 Git 的工作区 keystore；不要删除或更换它，否则升级安装会因签名不一致失败
-- 当前签名 Release APK：`176,931,324` 字节（约 168.7 MiB）；SHA-256：`99266661633f369a6fe846e583b3dd9f38f9a4d9a2801f7e1fcaccfc50dab94d`；已通过 Release 隐私审计
+- 当前签名 Release APK：`176,960,301` 字节（约 168.7 MiB）；SHA-256：`84ac20bea9a2c7bc092c562647c2f1dbe3a25e8daf472b3a8947daac0b5f8647`；已通过 Release 隐私审计和 APK v2 签名校验
 - Release 元数据：包名 `com.shinycolors.officialbot`、版本 `0.1.0 (1)`、ABI `arm64-v8a`、最低 Android 24、目标 Android 36；APK Signature Scheme v2 验证通过
 
 ## 构建
