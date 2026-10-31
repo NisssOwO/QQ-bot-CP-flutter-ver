@@ -34,7 +34,7 @@
     requireMention: true
     textChunkLimit: 4500
     sessionIdleTimeout: 1800000
-    processingTimeoutMs: 1800000
+    processingTimeoutMs: 120000
     streaming: true
     showToolResults: false
     media:
