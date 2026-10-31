@@ -69,17 +69,20 @@ class RuntimeBridge {
       protocol: '${raw['protocol'] ?? ''}',
       model: '${raw['model'] ?? ''}',
       baseUrl: '${raw['baseUrl'] ?? ''}',
+      thinkingLevel: '${raw['thinkingLevel'] ?? 'medium'}',
       appId: '${raw['appId'] ?? ''}',
       qqConfigured: raw['qqConfigured'] == true,
       llmConfigured: raw['llmConfigured'] == true,
     );
   }
 
-  Future<void> saveConfig({required String protocol, required String model, required String baseUrl, required String appId, required String secret, required String apiKey}) =>
+  Future<void> saveConfig({required String protocol, required String model, required String baseUrl, required String thinkingLevel, required String appId, required String secret, required String apiKey}) =>
       _call<void>('saveConfig', {
         'protocol': protocol, 'model': model, 'baseUrl': baseUrl,
-        'appId': appId, 'secret': secret, 'apiKey': apiKey,
+        'thinkingLevel': thinkingLevel, 'appId': appId, 'secret': secret, 'apiKey': apiKey,
       });
+
+  Future<List<String>> fetchModels(String baseUrl) async => (await _call<List<dynamic>>('fetchModels', {'baseUrl': baseUrl}, const Duration(seconds: 20)))?.whereType<String>().toList() ?? const [];
 
   Future<List<AiConfigHistory>> configHistory() async {
     final raw = await _call<List<dynamic>>('getConfigHistory', null, const Duration(seconds: 12), 2) ?? const [];

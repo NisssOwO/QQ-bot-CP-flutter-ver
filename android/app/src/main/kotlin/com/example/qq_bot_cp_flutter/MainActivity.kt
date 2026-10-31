@@ -48,6 +48,7 @@ class MainActivity : FlutterActivity() {
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
+                "fetchModels" -> fetchModels(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getConfigHistory" -> result.success(configHistory())
                 "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
                 "testQqConnection" -> testQqConnection(result)
@@ -137,6 +138,7 @@ class MainActivity : FlutterActivity() {
             "protocol" to config.getString("protocol", ""),
             "model" to config.getString("model", ""),
             "baseUrl" to config.getString("baseUrl", ""),
+            "thinkingLevel" to config.getString("thinkingLevel", "medium"),
             "appId" to if (credentials.has("qqbotAppId")) credentials.read("qqbotAppId") else "",
             "qqConfigured" to (credentials.has("qqbotAppId") && credentials.has("qqbotSecret")),
             "llmConfigured" to credentials.has("llmApiKey"),
@@ -155,6 +157,7 @@ class MainActivity : FlutterActivity() {
             .putString("protocol", values["protocol"] as? String ?: "")
             .putString("model", values["model"] as? String ?: "")
             .putString("baseUrl", values["baseUrl"] as? String ?: "")
+            .putString("thinkingLevel", values["thinkingLevel"] as? String ?: "medium")
             .apply()
         val configured = credentials.has("qqbotAppId") && credentials.has("qqbotSecret") && credentials.has("llmApiKey")
         getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("credentialsConfigured", configured).apply()
@@ -163,6 +166,38 @@ class MainActivity : FlutterActivity() {
             values["model"] as? String ?: "",
             values["baseUrl"] as? String ?: "",
         )
+    }
+
+    private fun fetchModels(values: Map<*, *>, result: MethodChannel.Result) {
+        val baseUrl = (values["baseUrl"] as? String ?: "").trim().trimEnd('/')
+        if (baseUrl.isBlank()) { result.error("MODEL_LIST_CONFIG", "请先填写 Base URL", null); return }
+        Thread {
+            try {
+                val endpoint = if (baseUrl.endsWith("/models")) baseUrl else "$baseUrl/models"
+                val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 12000
+                    setRequestProperty("Accept", "application/json")
+                    val key = CredentialStore(this@MainActivity).read("llmApiKey")
+                    if (key.isNotBlank()) setRequestProperty("Authorization", "Bearer $key")
+                }
+                val status = connection.responseCode
+                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                connection.disconnect()
+                if (status !in 200..299) throw IllegalStateException("模型接口返回 HTTP $status")
+                val json = org.json.JSONObject(body)
+                val data = json.optJSONArray("data") ?: org.json.JSONArray()
+                val models = (0 until data.length()).mapNotNull { index ->
+                    val item = data.optJSONObject(index) ?: return@mapNotNull null
+                    item.optString("id").trim().takeIf { it.isNotEmpty() }
+                }.distinct().sorted()
+                runOnUiThread { result.success(models) }
+            } catch (error: Exception) {
+                runOnUiThread { result.error("MODEL_LIST_ERROR", error.message ?: "无法获取模型列表", null) }
+            }
+        }.start()
     }
 
     private fun saveConfigHistory(protocol: String, model: String, baseUrl: String) {
@@ -453,14 +488,14 @@ class MainActivity : FlutterActivity() {
         val theme = getSharedPreferences("theme", MODE_PRIVATE)
         val role = getSharedPreferences("default-role", MODE_PRIVATE)
         val cards = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
-        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", "")).put("updateUrl", config.getString("updateUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("id", role.getString("id", "")).put("name", role.getString("name", "")).put("prompt", role.getString("prompt", ""))).put("roleCards", cards)
+        return JSONObject().put("schemaVersion", 1).put("appVersion", appInfo()["versionName"]).put("publicConfig", JSONObject().put("protocol", config.getString("protocol", "")).put("model", config.getString("model", "")).put("baseUrl", config.getString("baseUrl", "")).put("thinkingLevel", config.getString("thinkingLevel", "medium")).put("updateUrl", config.getString("updateUrl", ""))).put("theme", JSONObject().put("mode", theme.getString("mode", "dark")).put("seedColor", theme.getInt("seedColor", 0xff8290ff.toInt())).put("cardRadius", theme.getFloat("cardRadius", 16f)).put("cardOpacity", theme.getFloat("cardOpacity", 1f)).put("tintedBackground", theme.getBoolean("tintedBackground", false))).put("defaultRole", JSONObject().put("id", role.getString("id", "")).put("name", role.getString("name", "")).put("prompt", role.getString("prompt", ""))).put("roleCards", cards)
     }
 
     private fun restoreBackup(json: JSONObject) {
         val schema = json.optInt("schemaVersion", 0)
         if (schema == 1) {
             val config = json.optJSONObject("publicConfig") ?: JSONObject()
-            getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).putString("updateUrl", config.optString("updateUrl")).apply()
+            getSharedPreferences("public-config", MODE_PRIVATE).edit().putString("protocol", config.optString("protocol")).putString("model", config.optString("model")).putString("baseUrl", config.optString("baseUrl")).putString("thinkingLevel", config.optString("thinkingLevel", "medium")).putString("updateUrl", config.optString("updateUrl")).apply()
         } else if (json.optInt("version", 0) == 1) {
             // Legacy WebView export: migrate public AI fields and role cards only.
             // AppID, AppSecret and API keys are intentionally ignored.
