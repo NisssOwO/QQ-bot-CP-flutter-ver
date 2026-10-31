@@ -1,0 +1,10 @@
+{
+  "versionName": "0.1.0",
+  "versionCode": 1,
+  "abi": "arm64-v8a",
+  "minSdk": 24,
+  "sizeBytes": 167219181,
+  "sha256": "a9f45ac940d40a8c82293aab4e96d43ad1bc5af4385323ba993664911163d6f2",
+  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.1.0/QQ-bot-CP-arm64-v0.1.0.apk",
+  "releaseNotes": "Flutter 重构首个 arm64 Release 版本"
+}
