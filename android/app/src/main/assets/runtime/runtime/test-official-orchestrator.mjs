@@ -41,6 +41,13 @@ assert.equal(privateSwitched.command.role.id, 'tooru');
 const privatePrompt = orchestrator.ingest(privateMessage('私聊上下文', 'pm2'));
 assert.equal(privatePrompt.role.id, 'tooru');
 assert.equal(orchestrator.ingest(group2('群组仍是默认角色', 'g2m2')).role.id, 'nanoka');
+const resetPrivate = orchestrator.ingest(privateMessage('/preset-reset', 'pm3'));
+assert.equal(resetPrivate.action, 'command');
+assert.equal(resetPrivate.command.action, 'reset');
+const privateAfterReset = orchestrator.ingest(privateMessage('重置后私聊', 'pm4'));
+assert.equal(privateAfterReset.role.id, 'nanoka');
+const groupStillIsolated = orchestrator.ingest(group('群聊保持 hazuki', 'm4'));
+assert.equal(groupStillIsolated.role.id, 'hazuki');
 
 const duplicate = orchestrator.ingest(group('你好', 'm2'));
 assert.equal(duplicate.action, 'ignore');
