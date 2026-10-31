@@ -29,8 +29,16 @@ object RuntimeLogParser {
         }
         val failure = lower.contains("error") || lower.contains("failed") || lower.contains("disconnect")
         val connected = lower.contains("ready") || lower.contains("connected") || lower.contains("online")
+        val botReady = lower.contains("[im-qqbot] bot ready")
         val qq = if (module == "qq") (if (failure) "异常" else if (connected) "在线" else "连接中") else null
-        val ai = if (module == "ai") (if (failure || lower.contains("missing_credential")) "异常" else if (connected) "在线" else "请求中") else null
+        // The QQ gateway's ready signal means the configured LLM adapter finished loading
+        // as part of the same DSH profile. Keep the UI out of the misleading "未知" state
+        // until an actual request reports a failure.
+        val ai = when {
+            botReady -> "已就绪"
+            module == "ai" -> if (failure || lower.contains("missing_credential")) "异常" else if (connected) "在线" else "请求中"
+            else -> null
+        }
         val network = if (module == "network") (if (failure) "异常" else "连接中") else null
         val errorCode = when {
             lower.contains("failed to import") -> "plugin_import_failed"

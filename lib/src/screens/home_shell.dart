@@ -47,6 +47,12 @@ class _HomeShellState extends State<HomeShell> {
         _logs.add(entry);
         if (_logs.length > 500) _logs.removeAt(0);
       });
+      // Runtime status is persisted by the Android service as each stage arrives. Refresh
+      // the summary card when a state-bearing event arrives so the page does not remain on
+      // the pre-restart "starting/unknown" snapshot until the user taps the toolbar button.
+      if (entry.module == 'runtime' || entry.module == 'qq' || entry.module == 'ai' || entry.module == 'network') {
+        unawaited(_refreshState());
+      }
     });
     _loadRecentLogs();
     _refreshState();
