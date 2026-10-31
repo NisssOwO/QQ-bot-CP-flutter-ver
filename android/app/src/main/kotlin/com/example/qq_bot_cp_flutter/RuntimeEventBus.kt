@@ -2,10 +2,13 @@ package com.shinycolors.officialbot
 
 import io.flutter.plugin.common.EventChannel
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import org.json.JSONArray
 import org.json.JSONObject
 
 object RuntimeEventBus {
+  private val mainHandler = Handler(Looper.getMainLooper())
   @Volatile private var sink: EventChannel.EventSink? = null
   @Volatile private var context: Context? = null
   @Volatile var runId: String? = null
@@ -17,7 +20,7 @@ object RuntimeEventBus {
         runId?.let { event["runId"] = it }
         if (elapsedMs != null) event["elapsedMs"] = elapsedMs
     if (errorCode != null) event["errorCode"] = errorCode
-    sink?.success(event)
+    mainHandler.post { sink?.success(event) }
     context?.let { app ->
       try {
         val prefs = app.getSharedPreferences("runtime", Context.MODE_PRIVATE)
