@@ -21,7 +21,7 @@
 - [x] 建立协议能力表：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages、OpenAI-compatible；当前先落实思考参数兼容规则。
 - [x] 根据协议决定是否发送思考参数；`thinkingFormat: qwen` 仅对 OpenAI Chat Completions 生效。
 - [x] 对不支持的思考参数在发送前移除，OpenAI Responses 和 Anthropic Messages 不再继承该参数。
-- [ ] `relay` 路由和实际 wire protocol 分离，避免把路由名称误当成协议类型。
+- [x] `relay` 路由和实际 wire protocol 分离，`LLM_PROVIDER` 与 `LLM_API` 独立传递。
 - [x] 为思考参数兼容规则增加离线测试；完整请求构造测试列入后续 P0 子任务。
 
 验证记录：`android/app/src/main/assets/runtime/runtime/test-protocol-compat.mjs` 通过；DSH profile dump 已确认条件 compat 配置可被解析。
@@ -37,10 +37,10 @@
 
 ### P0.3 中转接口兼容
 
-- [ ] 检查 Base URL 自动补 `/models` 的规则。
+- [x] 检查 Base URL 自动补 `/models` 的规则；已处理已带 `/models` 和末尾斜杠。
 - [x] 支持标准 `{data:[{id:...}]}` 模型列表响应。
 - [x] 对直接数组、`models` 数组、字符串项和常见中转站错误响应提供兼容解析。
-- [ ] 处理认证头、超时、TLS、HTTP 状态和空响应。
+- [x] 处理认证头、超时、TLS、HTTP 状态和空响应。
 - [x] 为模型拉取失败提供 HTTP 状态和服务端错误消息。
 
 ## P1：配置页面测试后保存
@@ -56,7 +56,7 @@
 
 - [ ] 调整流程为：填写 → 测试接口 → 拉取模型 → 选择模型 → 测试请求 → 保存。
 - [x] 测试失败时保留原配置，不覆盖原本可用的配置。
-- [ ] 测试成功后才允许保存，或明确提供“仍要保存”二次确认。
+- [x] 测试成功后才允许保存；连接字段改变后保存按钮重新禁用。
 - [x] “测试接口”和“拉取模型”统一请求经过认证的 `/models`，临时输入的 API Key 会直接参与测试；未填写时回退读取 Keystore。
 - [x] 401、404 和其他模型接口 HTTP 状态显示具体中文原因。
 - [x] AI API Key 放在 Base URL 下方，填写顺序与实际请求顺序一致。
@@ -64,11 +64,11 @@
 
 ### P1.3 配置页面交互
 
-- [ ] 模型名称优先使用下拉选择，手动输入作为备用。
-- [ ] 所有密钥字段保存后保留圆点显示，不清空为未填写状态。
-- [ ] 为 Base URL、模型、思考程度、API Key 增加简短说明。
-- [ ] 统一按钮状态：测试中、拉取中、保存中、成功、失败、可重试。
-- [ ] 配置保存成功后同步刷新总览状态。
+- [x] 模型名称优先使用下拉选择，手动输入作为备用。
+- [x] 所有密钥字段保存后保留圆点显示，不清空为未填写状态。
+- [x] 为 Base URL、模型、思考程度、API Key 增加简短说明。
+- [x] 统一按钮状态：测试中、拉取中、保存中、成功、失败、可重试。
+- [x] 配置保存成功后同步刷新总览状态。
 
 ## P2：启动耗时和日志可观测性
 
