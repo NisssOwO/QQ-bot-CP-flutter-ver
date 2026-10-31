@@ -91,6 +91,16 @@ APK 输出位置：`build\app\outputs\flutter-apk\app-debug.apk`。
 - APK 安装仍由 Android 系统安装器确认，未知来源权限由系统管理。
 - 当前 Release 签名构建受 Flutter AOT 中文路径兼容性影响，发布前需使用 ASCII 临时构建路径。
 
+### AI 配置使用
+
+- 在“AI”页选择接口类型并填写 Base URL；OpenAI-compatible 接口可以点击“拉取模型”获取 `/models` 列表，也可以手动输入模型名。
+- “思考程度”提供关闭、低、中、高四档；只有接口和模型支持时才会生效，其他接口会忽略该参数。
+- API Key 保存在 Android Keystore，模型列表请求由 Android 原生层发起，Flutter 页面不读取密钥明文。
+
+### 角色卡使用
+
+角色页支持新建、编辑、导入、导出、删除和设置默认角色。自定义角色 ID 使用 `custom.xxx` 格式；人格提示词建议包含身份、性格、语气、行为规则、边界和示例回复。保存后在 QQ 中使用 `/preset <角色ID>` 切换。
+
 Runtime Bundle 不作为普通 Git 文件提交。准备干净 Runtime 时执行：
 
 ```powershell
