@@ -4,6 +4,8 @@
 
 目标：直接以 Flutter 作为新应用主架构，保留官方 QQ Bot + DSH/Node Runtime 作为独立后台运行层；优先完成新架构、AI 协议、主题、小组件、更新和公网 IP 能力。旧版 WebView/原生架构的历史闪退暂不作为重构前置条件，在 Flutter 版本完成后统一回归。
 
+当前排期调整：Android 9 适配和真机验收后置，先完成正常版本功能、Android 16 验证和 Release 发布链路；Android 9 不作为当前阶段阻塞条件。
+
 当前进度证据：P0 工程、测试、静态分析和 APK 构建已通过；P1 已完成 MethodChannel、Foreground Service、Keystore 配置链路和 Runtime Bundle 解包，但尚未完成真机真实 QQ/Node 启动。
 
 范围调整：
