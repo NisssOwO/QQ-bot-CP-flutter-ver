@@ -116,6 +116,7 @@ object RuntimeAssetInstaller {
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/outbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/session.js",
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/preset.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/session/session-manager.js",
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/middleware/typing-indicator.js",
         )
