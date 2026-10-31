@@ -410,7 +410,7 @@ class _ConfigPageState extends State<_ConfigPage> {
 
   Future<void> _testEndpoint() async {
     setState(() => testingEndpoint = true);
-    final result = await const EndpointTestService().test(baseUrl.text);
+    final result = await widget.bridge.testLlmConnection(baseUrl.text.trim(), apiKey: _credentialValue(apiKey));
     if (mounted) setState(() { testingEndpoint = false; endpointTest = result; });
   }
 
@@ -423,7 +423,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     if (baseUrl.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写 Base URL'))); return; }
     setState(() => loadingModels = true);
     try {
-      final models = await widget.bridge.fetchModels(baseUrl.text.trim());
+      final models = await widget.bridge.fetchModels(baseUrl.text.trim(), apiKey: _credentialValue(apiKey));
       if (mounted) setState(() { modelOptions = models; if (models.contains(model.text.trim())) model.text = model.text.trim(); });
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(models.isEmpty ? '接口没有返回可用模型' : '已拉取 ${models.length} 个模型')));
     } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('拉取模型失败：$error'))); }
