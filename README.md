@@ -14,6 +14,7 @@
 - 当前 Debug APK：约 `276,024,072` 字节；角色 preset、Android Runtime 自动恢复和不兼容工具禁用已在 Android 16 真机验证
 - Release 使用不提交到 Git 的工作区 keystore；不要删除或更换它，否则升级安装会因签名不一致失败
 - 当前签名 Release APK：`176,960,301` 字节（约 168.7 MiB）；SHA-256：`84ac20bea9a2c7bc092c562647c2f1dbe3a25e8daf472b3a8947daac0b5f8647`；已通过 Release 隐私审计和 APK v2 签名校验
+- 应用内更新：设置页固定使用官方清单 `release/manifest-arm64.json`，支持检查、下载、SHA-256 校验和交给 Android 安装器安装。
 - Release 元数据：包名 `com.shinycolors.officialbot`、版本 `0.1.0 (1)`、ABI `arm64-v8a`、最低 Android 24、目标 Android 36；APK Signature Scheme v2 验证通过
 
 ## 构建
