@@ -17,7 +17,7 @@ void main() {
   });
 
   test('rejects an incomplete or unsafe manifest', () {
-    final invalid = UpdateManifest(
+    const invalid = UpdateManifest(
       versionName: '',
       versionCode: 0,
       abi: 'mips',
