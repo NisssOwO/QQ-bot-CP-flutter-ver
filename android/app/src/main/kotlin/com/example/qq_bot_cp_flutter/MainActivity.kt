@@ -416,19 +416,20 @@ class MainActivity : FlutterActivity() {
         val prompt = values["prompt"] as? String ?: ""
         val existingPreset = findPresetFiles(id)
         require(Regex("custom\\.[a-z0-9][a-z0-9._-]{0,48}").matches(id) || existingPreset != null) { "角色 ID 必须是 custom.xxx 或已有内置角色 ID" }
-        require(name.isNotEmpty() && prompt.trim().isNotEmpty()) { "角色名称和提示词不能为空" }
+        require(prompt.trim().isNotEmpty()) { "角色提示词不能为空" }
+        val displayName = name.ifBlank { id }
         if (existingPreset != null) {
             existingPreset.first.writeText(prompt)
             val metadata = try { org.json.JSONObject(existingPreset.second.readText()) } catch (_: Exception) { org.json.JSONObject() }
-            metadata.put("id", id).put("displayName", name)
+            metadata.put("id", id).put("displayName", displayName)
             existingPreset.second.writeText(metadata.toString())
         } else {
-            writeRuntimePreset(id, name, prompt)
+            writeRuntimePreset(id, displayName, prompt)
         }
         val old = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
         val next = org.json.JSONArray(); var replaced = false
-        for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") == id) { next.put(org.json.JSONObject().put("id", id).put("displayName", name).put("prompt", prompt)); replaced = true } else next.put(item) }
-        if (!replaced) next.put(org.json.JSONObject().put("id", id).put("displayName", name).put("prompt", prompt))
+        for (index in 0 until old.length()) { val item = old.optJSONObject(index) ?: continue; if (item.optString("id") == id) { next.put(org.json.JSONObject().put("id", id).put("displayName", displayName).put("prompt", prompt)); replaced = true } else next.put(item) }
+        if (!replaced) next.put(org.json.JSONObject().put("id", id).put("displayName", displayName).put("prompt", prompt))
         getSharedPreferences("role-cards", MODE_PRIVATE).edit().putString("items", next.toString()).apply()
     }
 
