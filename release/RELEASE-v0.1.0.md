@@ -7,8 +7,8 @@
 - ABI：arm64-v8a
 - 最低 Android：24
 - 目标 Android：36
-- APK 大小：176,880,840 字节（约 168.7 MiB）
-- SHA-256：5b87e45c82c2a35f30a61450a6420ed6c33f2caf556e3a1211d56ab3624f6ad4
+- APK 大小：176,931,324 字节（约 168.7 MiB）
+- SHA-256：99266661633f369a6fe846e583b3dd9f38f9a4d9a2801f7e1fcaccfc50dab94d
 - 签名：工作区专用 Release keystore，APK v2 验证通过
 
 ## 本版本内容
@@ -32,3 +32,4 @@
 - APK 用户数据和凭据审计通过
 
 真实 QQ WebSocket、AI 网络请求和 Android 9 矩阵仍需配置凭据与对应设备后验收。
+
