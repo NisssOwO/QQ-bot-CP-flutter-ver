@@ -176,7 +176,7 @@ class _OverviewPage extends StatelessWidget {
   final VoidCallback onRestart;
 
   @override
-  Widget build(BuildContext context) => ListView(cacheExtent: 1200, padding: const EdgeInsets.all(16), children: [
+  Widget build(BuildContext context) => ListView(cacheExtent: 1200, padding: const EdgeInsets.fromLTRB(16, 16, 16, 144), children: [
         Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state)), trailing: Text('${state.elapsedMs} ms'))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
           Chip(avatar: const Icon(Icons.chat, size: 16), label: Text('QQ：${state.qqStatus}')),
