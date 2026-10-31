@@ -11,9 +11,9 @@
 - 最近一次 Android 16 实机烟测：新包安装成功，空配置首页、设置页、角色页和小组件 Provider 检查通过；未启动真实 Runtime。
 - Flutter 版本：3.47.9 stable
 - JDK：25（版本基线见 `tool/toolchain.json`）
-- 当前 Debug APK 约 330 MB；正式发布前仍需完成签名、ABI 和安装升级验收
+- 当前 Debug APK：`257,681,204` 字节（约 245.6 MiB）；正式发布前仍需完成最新签名、ABI 和安装升级验收
 - Release 使用不提交到 Git 的工作区 keystore；不要删除或更换它，否则升级安装会因签名不一致失败
-- 当前 Release APK：`200,543,659` 字节（约 191.2 MiB）；SHA-256：`c4a011ee03a18c8303e89477930066529a76a36b2016515e25503233ebdfd5d0`
+- 上一份已审计 Release 基线：`200,543,659` 字节（约 191.2 MiB）；SHA-256：`c4a011ee03a18c8303e89477930066529a76a36b2016515e25503233ebdfd5d0`。该值不是当前最新代码的 Release 校验值。
 
 ## 构建
 
