@@ -347,6 +347,16 @@ class _LogPageState extends State<_LogPage> {
     await Clipboard.setData(ClipboardData(text: content));
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制脱敏日志')));
   }
+  Color _levelColor(BuildContext context, LogLevel value) => switch (value) {
+    LogLevel.error => AppThemeTokens.of(context).error,
+    LogLevel.warn => AppThemeTokens.of(context).warning,
+    LogLevel.info => AppThemeTokens.of(context).success,
+  };
+  IconData _levelIcon(LogLevel value) => switch (value) {
+    LogLevel.error => Icons.error,
+    LogLevel.warn => Icons.warning_amber,
+    LogLevel.info => Icons.info,
+  };
   @override
   Widget build(BuildContext context) {
     return Column(children: [
@@ -356,7 +366,7 @@ class _LogPageState extends State<_LogPage> {
         Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) { module = value; _applyFilter(); })),
         IconButton(tooltip: '复制脱敏日志', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
       ])),
-      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; return ListTile(title: Text(entry.message), subtitle: Text('${entry.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}')); })),
+      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final color = _levelColor(context, entry.level); return ListTile(leading: Icon(_levelIcon(entry.level), color: color), title: Text(entry.message, style: TextStyle(color: color)), subtitle: Text('${entry.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}')); })),
     ]);
   }
 }
