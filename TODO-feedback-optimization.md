@@ -157,7 +157,7 @@
 ### P5.3 发布检查
 
 - [x] 重新执行 Flutter 测试、Dart 分析和 Runtime 离线回归（`flutter analyze --no-fatal-infos` 通过；仍有 11 条既有 info/deprecation 提示）。
-- [ ] 检查 APK 不包含用户数据、凭据、会话和角色卡。
+- [x] 检查 APK 不包含用户数据、凭据、会话和角色卡（Debug APK 审计通过，276,024,072 bytes）。
 - [ ] 更新 README、Release 说明、文件大小和 SHA-256。
 - [ ] 构建签名 APK 并上传 Release。
 
