@@ -37,6 +37,7 @@ class _HomeShellState extends State<HomeShell> {
   String _ipCheckedAt = '';
   bool _ipLoading = false;
   bool _hidePublicIp = false;
+  Map<String, String> _sessionRoles = const {};
 
   @override
   void initState() {
@@ -53,10 +54,12 @@ class _HomeShellState extends State<HomeShell> {
       if (entry.module == 'runtime' || entry.module == 'qq' || entry.module == 'ai' || entry.module == 'network') {
         unawaited(_refreshState());
       }
+      if (entry.module == 'qq' || entry.message.contains('preset')) unawaited(_refreshSessionRoles());
     });
     _loadRecentLogs();
     _refreshState();
     _refreshConfig();
+    _refreshSessionRoles();
     _refreshPublicIp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartRuntime());
   }
@@ -102,6 +105,9 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _refreshConfig() async {
     try { final config = await _bridge.config(); if (mounted) setState(() => _publicConfig = config); } catch (_) {}
+  }
+  Future<void> _refreshSessionRoles() async {
+    try { final roles = await _bridge.sessionRoleStatus(); if (mounted) setState(() => _sessionRoles = roles); } catch (_) {}
   }
 
   Future<void> _restart() async {
@@ -611,10 +617,9 @@ class _SettingsPageState extends State<_SettingsPage> {
   @override
   void dispose() { updateUrl.dispose(); super.dispose(); }
   double _snapOpacity(double value) => [0.7, 0.85, 1.0].reduce((a, b) => (value - a).abs() < (value - b).abs() ? a : b);
-  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); final savedUpdateUrl = await widget.bridge.updateEndpoint(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = savedUpdateUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = defaultUpdateManifestUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
-  Future<void> _saveUpdateEndpoint(String value) async { try { await widget.bridge.saveUpdateEndpoint(value); } catch (_) {} }
   Future<void> _install() async {
     setState(() => installing = true);
     final result = await widget.bridge.pickAndInstallApk();
@@ -627,7 +632,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   Future<void> _checkUpdate() async {
     setState(() => checkingUpdate = true);
     try {
-      final value = await const UpdateService().check(updateUrl.text);
+      final value = await const UpdateService().check(defaultUpdateManifestUrl);
       if (mounted) setState(() => manifest = value);
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('检查更新失败：$error')));
@@ -681,9 +686,9 @@ class _SettingsPageState extends State<_SettingsPage> {
     ]),
     const Text('系统可能限制后台活动；请按需允许本应用后台运行和通知。', style: TextStyle(color: Colors.white60)),
     const SizedBox(height: 12),
-    TextField(controller: updateUrl, onChanged: (value) { _saveUpdateEndpoint(value); setState(() {}); }, decoration: const InputDecoration(labelText: '更新清单 URL', hintText: '留空；填写公开 JSON 地址', border: OutlineInputBorder())),
+    TextField(controller: updateUrl, readOnly: true, decoration: const InputDecoration(labelText: '内置更新清单', helperText: '应用固定从官方清单检查更新', border: OutlineInputBorder())),
     const SizedBox(height: 8),
-    FilledButton.tonalIcon(onPressed: checkingUpdate || updateUrl.text.trim().isEmpty ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
+    FilledButton.tonalIcon(onPressed: checkingUpdate ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
     if (manifest != null) ...[
       Card(child: ListTile(title: Text('最新版本 ${manifest!.versionName} · ${manifest!.abi}'), subtitle: Text('${manifest!.releaseNotes}\n大小：${manifest!.sizeLabel}\nSHA-256：${manifest!.sha256}'), isThreeLine: true)),
       if (downloading) ...[LinearProgressIndicator(value: downloadProgress), Row(children: [Expanded(child: Text('下载中 ${(downloadProgress * 100).toStringAsFixed(0)}%')), IconButton(tooltip: '暂停', onPressed: _pauseDownload, icon: const Icon(Icons.pause)), IconButton(tooltip: '取消', onPressed: _cancelDownload, icon: const Icon(Icons.close))])],

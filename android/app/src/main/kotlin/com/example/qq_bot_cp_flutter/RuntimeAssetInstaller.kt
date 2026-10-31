@@ -118,6 +118,7 @@ object RuntimeAssetInstaller {
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/session.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/preset.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/session/session-manager.js",
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/model/prefs-store.js",
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/middleware/typing-indicator.js",
         )
         files.forEach { assetPath ->
