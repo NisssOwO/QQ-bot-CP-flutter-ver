@@ -1,6 +1,6 @@
 # QQ-bot-CP Flutter 重构 TODO
 
-工作区：`F:\产出\official-bot-migration\Flutter ver`
+工作区：`本地工程目录`
 
 目标：直接以 Flutter 作为新应用主架构，保留官方 QQ Bot + DSH/Node Runtime 作为独立后台运行层；优先完成新架构、AI 协议、主题、小组件、更新和公网 IP 能力。旧版 WebView/原生架构的历史闪退暂不作为重构前置条件，在 Flutter 版本完成后统一回归。
 
