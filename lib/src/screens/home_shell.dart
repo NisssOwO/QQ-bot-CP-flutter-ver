@@ -176,8 +176,8 @@ class _OverviewPage extends StatelessWidget {
   final VoidCallback onRestart;
 
   @override
-  Widget build(BuildContext context) => ListView(scrollCacheExtent: 1200, padding: const EdgeInsets.all(16), children: [
-        Card(child: ListTile(leading: Icon(Icons.circle, color: AppThemeTokens.of(context).warning), title: Text(_statusLabel(state.status)), subtitle: Text(state.phase.isEmpty ? '还没有启动 Runtime' : state.phase), trailing: Text('${state.elapsedMs} ms'))),
+  Widget build(BuildContext context) => ListView(cacheExtent: 1200, padding: const EdgeInsets.all(16), children: [
+        Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state)), trailing: Text('${state.elapsedMs} ms'))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
           Chip(avatar: const Icon(Icons.chat, size: 16), label: Text('QQ：${state.qqStatus}')),
           Chip(avatar: const Icon(Icons.auto_awesome, size: 16), label: Text('AI：${state.aiStatus}')),
@@ -222,6 +222,27 @@ class _OverviewPage extends StatelessWidget {
         RuntimeStatus.failed => '异常',
         RuntimeStatus.stopping => '停止中',
       };
+
+  static Color _statusColor(BuildContext context, RuntimeStatus status) => switch (status) {
+    RuntimeStatus.online => AppThemeTokens.of(context).success,
+    RuntimeStatus.failed => AppThemeTokens.of(context).error,
+    RuntimeStatus.reconnecting || RuntimeStatus.starting || RuntimeStatus.stopping => AppThemeTokens.of(context).warning,
+    RuntimeStatus.stopped => Theme.of(context).colorScheme.outline,
+  };
+
+  static String _phaseDescription(RuntimeState state) {
+    if (state.status == RuntimeStatus.stopped && state.message.isEmpty) return '还没有启动 Runtime';
+    final estimate = switch (state.phase) {
+      'restart.begin' || 'process.stop' => '约 1 秒',
+      'runtime.prepare' || 'config.load' => '约 1–3 秒',
+      'plugin.load' || 'runtime.spawn' => '约 3–10 秒',
+      'network.check' || 'qq.connect' => '约 2–15 秒（取决于网络）',
+      'session.restore' || 'ready' || 'restart.complete' => '约 1 秒',
+      _ => null,
+    };
+    final current = state.message.isEmpty ? state.phase : '${state.phase}：${state.message}';
+    return estimate == null || state.status != RuntimeStatus.starting ? current : '$current · 预计 $estimate';
+  }
 }
 
 class _IpLine extends StatelessWidget {
@@ -580,17 +601,18 @@ class _RolePageState extends State<_RolePage> {
   final importJson = TextEditingController();
   List<RoleCard> roles = const [];
   String defaultId = '';
+  String defaultName = '';
   bool loading = true;
   bool get currentBuiltin => roles.any((role) => role.id == roleId.text.trim() && role.builtin);
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { roleId.dispose(); roleName.dispose(); rolePrompt.dispose(); importJson.dispose(); super.dispose(); }
-  Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); }
+  Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; defaultName = role['name'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); }
   void _newRole() { setState(() { roleId.text = 'custom.newrole'; roleName.clear(); rolePrompt.clear(); }); }
   void _edit(RoleCard role) { setState(() { roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); }
   Future<void> _save() async { try { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); await widget.bridge.saveRoleCard(role); await _load(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已保存'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$error'))); } }
-  Future<void> _setDefault() async { if (roleId.text.trim().isEmpty) return; await widget.bridge.saveDefaultRole(id: roleId.text.trim(), name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) setState(() => defaultId = roleId.text.trim()); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已设为默认角色'))); }
+  Future<void> _setDefault() async { if (roleId.text.trim().isEmpty) return; await widget.bridge.saveDefaultRole(id: roleId.text.trim(), name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) setState(() { defaultId = roleId.text.trim(); defaultName = roleName.text.trim(); }); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已设为默认角色'))); }
   Future<void> _delete() async { final id = roleId.text.trim(); if (id.isEmpty) return; final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认删除角色？'), content: Text('将删除 $id，且无法恢复。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除'))])) ?? false; if (!ok) return; await widget.bridge.deleteRoleCard(id); _newRole(); await _load(); }
   Future<void> _import() async { try { final decoded = await decodeJsonInBackground(importJson.text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); importJson.clear(); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
   Future<void> _export() async { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); final result = await widget.bridge.exportRoleCard(jsonEncode(role.toMap())); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '角色卡已导出' : '导出操作：${result['status']}'))); }
@@ -603,6 +625,8 @@ class _RolePageState extends State<_RolePage> {
     const SizedBox(height: 8),
     const Card(child: Padding(padding: EdgeInsets.all(12), child: Text('填写建议：角色 ID 只能使用 custom.xxx 或已有内置 ID；显示名称用于列表展示；人格提示词建议写清身份、语气、行为规则、禁止事项和回复格式。提示词为空时不会保存。', style: TextStyle(color: Colors.white70)))),
     const SizedBox(height: 16),
+    Card(child: ListTile(leading: Icon(defaultId.isEmpty ? Icons.star_border : Icons.star, color: defaultId.isEmpty ? Colors.white54 : Colors.amber), title: Text(defaultId.isEmpty ? '尚未设置默认角色' : '默认角色：${defaultName.isEmpty ? '已选择角色' : defaultName}'), subtitle: const Text('新会话和未指定角色的消息会使用这里的角色；选择角色后点击“设为默认角色”。'))),
+    const SizedBox(height: 8),
     Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _newRole, icon: const Icon(Icons.add), label: const Text('新建角色'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload_file), label: const Text('导出 JSON')))]),
     const SizedBox(height: 12),
     if (roles.isEmpty) const Card(child: ListTile(leading: Icon(Icons.info_outline), title: Text('暂无自定义角色'), subtitle: Text('点击“新建角色”创建 custom.xxx 角色卡。'))),
