@@ -33,6 +33,18 @@ $uiPath = '/sdcard/qqbotcp-smoke-ui.xml'
 Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
 $ui = Invoke-Adb @('shell', 'cat', $uiPath)
 foreach ($text in @('QQ-bot-CP', '设备公网 IP', 'AI 接口', '角色')) { if ($ui -notmatch [regex]::Escape($text)) { throw "UI 缺少关键文案：$text" } }
+Invoke-Adb @('shell', 'input', 'tap', '2304', '1488') | Out-Null
+Start-Sleep -Seconds 1
+Invoke-Adb @('shell', 'input', 'swipe', '1800', '1300', '1800', '350', '500') | Out-Null
+Start-Sleep -Seconds 1
+Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
+$settingsUi = Invoke-Adb @('shell', 'cat', $uiPath)
+foreach ($text in @('设置', '更新清单 URL', '配置备份')) { if ($settingsUi -notmatch [regex]::Escape($text)) { throw "设置页缺少关键文案：$text" } }
+Invoke-Adb @('shell', 'input', 'tap', '1792', '1488') | Out-Null
+Start-Sleep -Seconds 1
+Invoke-Adb @('shell', 'uiautomator', 'dump', $uiPath) | Out-Null
+$rolesUi = Invoke-Adb @('shell', 'cat', $uiPath)
+foreach ($text in @('角色', '角色管理', '新建角色')) { if ($rolesUi -notmatch [regex]::Escape($text)) { throw "角色页缺少关键文案：$text" } }
 $receivers = Invoke-Adb @('shell', 'dumpsys', 'package', 'com.shinycolors.officialbot')
 if ($receivers -notmatch 'RuntimeWidgetProvider') { throw 'RuntimeWidgetProvider 未注册' }
 Write-Output 'PASS Android 16 arm64 smoke test'
