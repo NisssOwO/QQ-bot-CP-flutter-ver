@@ -393,6 +393,8 @@ class _ConfigPageState extends State<_ConfigPage> {
   int? selectedHistory;
   EndpointTestResult? endpointTest;
   bool testingEndpoint = false;
+  EndpointTestResult? requestTest;
+  bool testingRequest = false;
   Map<String, Object?>? qqTest;
   bool testingQq = false;
   bool qqConfigured = false;
@@ -425,13 +427,13 @@ class _ConfigPageState extends State<_ConfigPage> {
     finally { if (mounted) setState(() => loading = false); }
   }
   Future<void> _restoreSavedConfig() async {
-    if (mounted) setState(() { loading = true; endpointValidated = false; testedConnection = ''; endpointTest = null; });
+    if (mounted) setState(() { loading = true; endpointValidated = false; testedConnection = ''; endpointTest = null; requestTest = null; });
     await _load();
   }
   Future<void> _save() async {
     final url = baseUrl.text.trim();
     if (_needsLlmValidation && !_connectionReady) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先测试接口并确认认证成功，再保存 AI 配置')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先测试接口并完成测试请求，再保存 AI 配置')));
       return;
     }
     if (url.isNotEmpty) {
@@ -456,12 +458,25 @@ class _ConfigPageState extends State<_ConfigPage> {
   }
 
   Future<void> _testEndpoint() async {
-    setState(() { testingEndpoint = true; endpointValidated = false; testedConnection = ''; });
+    setState(() { testingEndpoint = true; endpointValidated = false; testedConnection = ''; requestTest = null; });
     try {
       final result = await widget.bridge.testLlmConnection(baseUrl.text.trim(), apiKey: _credentialValue(apiKey));
       if (mounted) setState(() { testingEndpoint = false; endpointTest = result; endpointValidated = result.ok; testedConnection = result.ok ? _connectionFingerprint : ''; });
     } catch (error) {
       if (mounted) setState(() { testingEndpoint = false; endpointTest = EndpointTestResult(ok: false, stage: '测试', message: '$error'); });
+    }
+  }
+  Future<void> _testRequest() async {
+    if (protocol.text.trim().isEmpty || baseUrl.text.trim().isEmpty || model.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写接口类型、Base URL 和模型名称')));
+      return;
+    }
+    setState(() { testingRequest = true; requestTest = null; });
+    try {
+      final result = await widget.bridge.testLlmRequest(protocol: protocol.text.trim(), baseUrl: baseUrl.text.trim(), model: model.text.trim(), apiKey: _credentialValue(apiKey));
+      if (mounted) setState(() { testingRequest = false; requestTest = result; });
+    } catch (error) {
+      if (mounted) setState(() { testingRequest = false; requestTest = EndpointTestResult(ok: false, stage: '测试请求', message: '$error'); });
     }
   }
 
@@ -510,8 +525,8 @@ class _ConfigPageState extends State<_ConfigPage> {
       const SizedBox(height: 10),
       DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
       const SizedBox(height: 14),
-      _field(baseUrl, 'Base URL', '先填写接口地址，模型列表会从该地址的 /models 拉取', onChanged: (_) => setState(() {})),
-      _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() {})),
+      _field(baseUrl, 'Base URL', '先填写接口地址，模型列表会从该地址的 /models 拉取', onChanged: (_) => setState(() { requestTest = null; })),
+      _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() { requestTest = null; })),
       FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')),
       if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))), if (!endpointTest!.ok) TextButton.icon(onPressed: _copyEndpointDiagnostic, icon: const Icon(Icons.copy, size: 16), label: const Text('复制诊断'))])),
       const SizedBox(height: 14),
@@ -519,11 +534,14 @@ class _ConfigPageState extends State<_ConfigPage> {
         DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '已拉取的模型', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
         const SizedBox(height: 14),
       ],
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _field(model, '模型名称', '可手动输入，也可从上面的 Base URL 拉取', onChanged: (_) => setState(() {}))), const SizedBox(width: 12), Padding(padding: const EdgeInsets.only(top: 4), child: FilledButton.tonalIcon(onPressed: loadingModels || baseUrl.text.trim().isEmpty ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型')))]),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _field(model, '模型名称', '可手动输入，也可从上面的 Base URL 拉取', onChanged: (_) => setState(() { requestTest = null; }))), const SizedBox(width: 12), Padding(padding: const EdgeInsets.only(top: 4), child: FilledButton.tonalIcon(onPressed: loadingModels || baseUrl.text.trim().isEmpty ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型')))]),
       const SizedBox(height: 4),
       DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
+      const SizedBox(height: 8),
+      FilledButton.tonalIcon(onPressed: testingRequest || model.text.trim().isEmpty ? null : _testRequest, icon: testingRequest ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline), label: const Text('测试请求（发送一条 ping）')),
+      if (requestTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${requestTest!.ok ? '✓' : '✕'} ${requestTest!.stage}：${requestTest!.message}${requestTest!.statusCode == null ? '' : '（HTTP ${requestTest!.statusCode}）'}${requestTest!.elapsedMs == null ? '' : ' · ${requestTest!.elapsedMs} ms'}', style: TextStyle(color: requestTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
       const SizedBox(height: 14),
-      Text(_connectionReady ? '✓ AI 接口认证测试通过，可以保存配置。' : '保存 AI 配置前，请先测试接口；测试失败不会覆盖旧配置。', style: TextStyle(color: _connectionReady ? AppThemeTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant)),
+      Text(_connectionReady ? '✓ AI 接口认证和测试请求均通过，可以保存配置。' : '保存 AI 配置前，请先测试接口并发送测试请求；失败不会覆盖旧配置。', style: TextStyle(color: _connectionReady ? AppThemeTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant)),
       const SizedBox(height: 6),
       Row(children: [Expanded(child: Text(_hasUnsavedChanges ? '当前页面有未保存修改' : '当前内容与已保存配置一致', style: TextStyle(color: _hasUnsavedChanges ? AppThemeTokens.of(context).warning : Theme.of(context).colorScheme.onSurfaceVariant))), if (_hasUnsavedChanges) TextButton.icon(onPressed: loading ? null : _restoreSavedConfig, icon: const Icon(Icons.undo), label: const Text('恢复已保存'))]),
       const SizedBox(height: 8),
@@ -551,7 +569,7 @@ class _ConfigPageState extends State<_ConfigPage> {
   }
 
   bool get _needsLlmValidation => baseUrl.text.trim().isNotEmpty || llmConfigured || _credentialValue(apiKey).isNotEmpty;
-  bool get _connectionReady => endpointValidated && testedConnection == _connectionFingerprint;
+  bool get _connectionReady => endpointValidated && testedConnection == _connectionFingerprint && requestTest?.ok == true;
   bool get _hasUnsavedChanges => protocol.text.trim() != savedProtocol || model.text.trim() != savedModel || baseUrl.text.trim() != savedBaseUrl || thinkingLevel != savedThinkingLevel || appId.text.trim() != savedAppId || (apiKey.text.isNotEmpty && apiKey.text != _savedMask) || (secret.text.isNotEmpty && secret.text != _savedMask);
 
   Future<void> _clearHistory() async {

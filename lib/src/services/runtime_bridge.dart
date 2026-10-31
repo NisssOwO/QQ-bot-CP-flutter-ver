@@ -95,6 +95,10 @@ class RuntimeBridge {
     final raw = (await _call<Map<dynamic, dynamic>>('testLlmConnection', {'baseUrl': baseUrl, 'apiKey': apiKey}, const Duration(seconds: 20)))?.map((key, value) => MapEntry('$key', value)) ?? <String, dynamic>{};
     return EndpointTestResult(ok: raw['ok'] == true, stage: '${raw['stage'] ?? 'HTTP'}', message: '${raw['message'] ?? '接口测试失败'}', statusCode: (raw['statusCode'] as num?)?.toInt(), elapsedMs: (raw['elapsedMs'] as num?)?.toInt());
   }
+  Future<EndpointTestResult> testLlmRequest({required String protocol, required String baseUrl, required String model, String apiKey = ''}) async {
+    final raw = (await _call<Map<dynamic, dynamic>>('testLlmRequest', {'protocol': protocol, 'baseUrl': baseUrl, 'model': model, 'apiKey': apiKey}, const Duration(seconds: 30)))?.map((key, value) => MapEntry('$key', value)) ?? <String, dynamic>{};
+    return EndpointTestResult(ok: raw['ok'] == true, stage: '${raw['stage'] ?? '模型请求'}', message: '${raw['message'] ?? '测试请求失败'}', statusCode: (raw['statusCode'] as num?)?.toInt(), elapsedMs: (raw['elapsedMs'] as num?)?.toInt());
+  }
 
   Future<List<AiConfigHistory>> configHistory() async {
     final raw = await _call<List<dynamic>>('getConfigHistory', null, const Duration(seconds: 12), 2) ?? const [];
