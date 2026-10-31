@@ -301,7 +301,7 @@
 ## P12：发布前检查
 
 - [x] Release APK 通过自动审计，不包含凭据、会话目录、用户角色卡或 `.env` 文件；模型/地址需在正式发布前继续人工复核。
-- [x] APK 使用工作区专用正式签名；Release 构建会拒绝缺少 keystore 配置的环境，当前 Release SHA-256 已记录到 README。
+- [x] APK 使用工作区专用正式签名；Release 构建会拒绝缺少 keystore 配置的环境，当前 Release SHA-256、包名、版本、ABI 和签名方案已记录并核验。
 - [x] APK ABI、最低 Android 版本和目标版本写入 README。
 - [ ] Release 页面包含更新说明、文件大小和校验值。
 - [x] 最新 arm64 Debug APK 和签名 Release APK 均通过相同隐私/用户数据审计；Release SHA-256 已记录到 README。
