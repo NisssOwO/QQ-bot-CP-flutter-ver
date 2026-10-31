@@ -17,6 +17,7 @@ object RuntimeAssetInstaller {
             refreshProfile(context, target)
             refreshPiAiManifest(context, target)
             refreshOpenAiParser(context, target)
+            refreshAndroidRuntimeOverrides(context, target)
             return target
         }
         copyTree(context, "runtime", target)
@@ -24,6 +25,7 @@ object RuntimeAssetInstaller {
         refreshProfile(context, target)
         refreshPiAiManifest(context, target)
         refreshOpenAiParser(context, target)
+        refreshAndroidRuntimeOverrides(context, target)
         File(target, "bin/node").setExecutable(true, false)
         prefs.edit().putString("assetVersion", VERSION).apply()
         return target
@@ -90,6 +92,24 @@ object RuntimeAssetInstaller {
             }
         } catch (_: Exception) {
             // An incomplete bundle will report the exact import failure in the Runtime log.
+        }
+    }
+
+    private fun refreshAndroidRuntimeOverrides(context: Context, target: File) {
+        val files = listOf(
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
+            "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/middleware/typing-indicator.js",
+        )
+        files.forEach { assetPath ->
+            try {
+                context.assets.open(assetPath).use { input ->
+                    val output = File(target, assetPath.removePrefix("runtime/"))
+                    output.parentFile?.mkdirs()
+                    FileOutputStream(output).use { file -> input.copyTo(file, 32 * 1024) }
+                }
+            } catch (_: Exception) {
+                // Keep the bundled implementation if a future Runtime omits an override file.
+            }
         }
     }
 
