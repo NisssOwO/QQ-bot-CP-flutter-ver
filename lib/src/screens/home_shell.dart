@@ -134,7 +134,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp)),
+      _OverviewPage(state: _state, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge),
       _LogPage(logs: _logs),
       _RolePage(bridge: _bridge),
@@ -160,7 +160,7 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp});
+  const _OverviewPage({required this.state, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
   final RuntimeState state;
   final String publicIp;
   final String publicIpv6;
@@ -172,10 +172,12 @@ class _OverviewPage extends StatelessWidget {
   final VoidCallback onRefreshIp;
   final ValueChanged<String> onCopyIp;
   final VoidCallback onToggleHideIp;
+  final VoidCallback onOpenAi;
+  final VoidCallback onRestart;
 
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: ListTile(leading: Icon(Icons.circle, color: AppThemeTokens.of(context).warning), title: Text(_statusLabel(state.status)), subtitle: Text(state.phase), trailing: Text('${state.elapsedMs} ms'))),
+  Widget build(BuildContext context) => ListView(scrollCacheExtent: 1200, padding: const EdgeInsets.all(16), children: [
+        Card(child: ListTile(leading: Icon(Icons.circle, color: AppThemeTokens.of(context).warning), title: Text(_statusLabel(state.status)), subtitle: Text(state.phase.isEmpty ? '还没有启动 Runtime' : state.phase), trailing: Text('${state.elapsedMs} ms'))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
           Chip(avatar: const Icon(Icons.chat, size: 16), label: Text('QQ：${state.qqStatus}')),
           Chip(avatar: const Icon(Icons.auto_awesome, size: 16), label: Text('AI：${state.aiStatus}')),
@@ -194,6 +196,16 @@ class _OverviewPage extends StatelessWidget {
         ]))),
         Card(child: ListTile(title: const Text('QQ 官方机器人'), subtitle: Text(qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret'), leading: Icon(qqConfigured ? Icons.check_circle : Icons.info_outline, color: qqConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
         Card(child: ListTile(title: const Text('AI 接口'), subtitle: Text(llmConfigured ? 'API Key 已配置' : '等待填写 API Key'), leading: Icon(llmConfigured ? Icons.check_circle : Icons.info_outline, color: llmConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Text(qqConfigured && llmConfigured ? '配置已齐全：点击“启动 Runtime”后，应用会依次加载配置、启动服务、连接 QQ，再进入运行状态。' : '首次使用请按顺序完成：1. 填写 AI 接口、模型、Base URL 和 AI 密钥；2. 填写 QQ AppID 与 AppSecret；3. 保存配置；4. 返回这里启动 Runtime。'),
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if (!qqConfigured || !llmConfigured) OutlinedButton.icon(onPressed: onOpenAi, icon: const Icon(Icons.settings), label: const Text('去填写配置')),
+            FilledButton.icon(onPressed: onRestart, icon: const Icon(Icons.play_arrow), label: Text(state.status == RuntimeStatus.online ? '重新启动 Runtime' : '启动 Runtime')),
+          ]),
+        ]))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('聊天指令', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
@@ -314,13 +326,14 @@ class _ConfigPageState extends State<_ConfigPage> {
   String thinkingLevel = 'medium';
   List<String> modelOptions = const [];
   bool loadingModels = false;
+  static const _savedMask = '••••••••';
 
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { for (final c in [protocol, model, baseUrl, appId, secret, apiKey]) { c.dispose(); } super.dispose(); }
   Future<void> _load() async {
-    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; thinkingLevel = c.thinkingLevel; qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured; history = await widget.bridge.configHistory(); }
+    try { final c = await widget.bridge.config(); protocol.text = c.protocol; model.text = c.model; baseUrl.text = c.baseUrl; appId.text = c.appId; thinkingLevel = c.thinkingLevel; qqConfigured = c.qqConfigured; llmConfigured = c.llmConfigured; if (qqConfigured) secret.text = _savedMask; if (llmConfigured) apiKey.text = _savedMask; history = await widget.bridge.configHistory(); }
     finally { if (mounted) setState(() => loading = false); }
   }
   Future<void> _save() async {
@@ -332,9 +345,14 @@ class _ConfigPageState extends State<_ConfigPage> {
         return;
       }
     }
-    await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: thinkingLevel, appId: appId.text.trim(), secret: secret.text, apiKey: apiKey.text);
+    final enteredSecret = _credentialValue(secret);
+    final enteredApiKey = _credentialValue(apiKey);
+    await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: thinkingLevel, appId: appId.text.trim(), secret: enteredSecret, apiKey: enteredApiKey);
     final nextHistory = await widget.bridge.configHistory();
-    secret.clear(); apiKey.clear();
+    if (secret.text.isNotEmpty) secret.text = _savedMask;
+    if (apiKey.text.isNotEmpty) apiKey.text = _savedMask;
+    qqConfigured = qqConfigured || enteredSecret.isNotEmpty;
+    llmConfigured = llmConfigured || enteredApiKey.isNotEmpty;
     if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
   }
@@ -392,13 +410,13 @@ class _ConfigPageState extends State<_ConfigPage> {
       _sectionTitle('QQ 官方机器人', 'AppID 与 AppSecret 用于连接 QQ 官方机器人服务。'),
       const SizedBox(height: 10),
       _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置'),
-      _field(secret, 'QQ AppSecret', qqConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
+      _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写'),
       FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
       if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
       const SizedBox(height: 24),
       _sectionTitle('AI 接口凭据', '密钥只保存到 Android Keystore；输入框留空表示保持原值。'),
       const SizedBox(height: 10),
-      _field(apiKey, 'AI API Key', llmConfigured ? '已保存；留空表示不修改' : '未保存，请填写', obscure: true),
+      _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写'),
       const SizedBox(height: 4),
       SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置'))),
       if (history.isNotEmpty) Center(child: TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置'))),
@@ -407,6 +425,10 @@ class _ConfigPageState extends State<_ConfigPage> {
 
   Widget _sectionTitle(String title, String description) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(description, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))]);
 
+  String _credentialValue(TextEditingController controller) => controller.text == _savedMask ? '' : controller.text;
+
+  Widget _credentialField(TextEditingController controller, String label, String hint) => _field(controller, label, hint, obscure: true, onTap: () { if (controller.text == _savedMask) controller.clear(); });
+
   Future<void> _clearHistory() async {
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('清除历史配置？'), content: const Text('只会删除接口类型、模型和 Base URL 历史，不会删除已保存的密钥。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('清除'))])) ?? false;
     if (!confirmed) return;
@@ -414,7 +436,7 @@ class _ConfigPageState extends State<_ConfigPage> {
     if (mounted) setState(() { history = const []; selectedHistory = null; });
   }
 
-  Widget _field(TextEditingController c, String label, String hint, {bool obscure = false, ValueChanged<String>? onChanged}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, onChanged: onChanged, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
+  Widget _field(TextEditingController c, String label, String hint, {bool obscure = false, ValueChanged<String>? onChanged, VoidCallback? onTap}) => Padding(padding: const EdgeInsets.only(bottom: 12), child: TextField(controller: c, obscureText: obscure, onChanged: onChanged, onTap: onTap, decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder())));
 }
 
 class _SettingsPage extends StatefulWidget {
