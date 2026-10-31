@@ -434,7 +434,12 @@ class MainActivity : FlutterActivity() {
 
     private fun defaultRole(): Map<String, String> {
         val prefs = getSharedPreferences("default-role", MODE_PRIVATE)
-        return mapOf("id" to prefs.getString("id", "").orEmpty(), "name" to prefs.getString("name", "").orEmpty(), "prompt" to prefs.getString("prompt", "").orEmpty())
+        val id = prefs.getString("id", "").orEmpty()
+        if (id.isNotBlank() && roleCards().none { it["id"] == id }) {
+            prefs.edit().clear().apply()
+            return mapOf("id" to "", "name" to "", "prompt" to "", "missing" to "true")
+        }
+        return mapOf("id" to id, "name" to prefs.getString("name", "").orEmpty(), "prompt" to prefs.getString("prompt", "").orEmpty())
     }
 
     private fun saveDefaultRole(values: Map<*, *>) {

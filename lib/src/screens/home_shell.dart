@@ -732,7 +732,7 @@ class _RolePageState extends State<_RolePage> {
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { roleId.dispose(); roleName.dispose(); rolePrompt.dispose(); importJson.dispose(); super.dispose(); }
-  Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; defaultName = role['name'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); }
+  Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; defaultName = role['name'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); if (mounted && role['missing'] == 'true') ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('原默认角色已不存在，已回退为空角色；请重新设置默认角色。'))); }
   void _newRole() { setState(() { editingExisting = false; editingId = ''; roleId.clear(); roleName.clear(); rolePrompt.clear(); }); }
   void _edit(RoleCard role) { setState(() { editingExisting = true; editingId = role.id; roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); }
   Future<void> _save() async {
@@ -743,6 +743,17 @@ class _RolePageState extends State<_RolePage> {
       final prompt = rolePrompt.text.trim();
       if (prompt.isEmpty) throw StateError('人格提示词不能为空');
       final name = roleName.text.trim().isEmpty ? id : roleName.text.trim();
+      RoleCard? existing;
+      for (final candidate in roles) {
+        if (candidate.id == id) {
+          existing = candidate;
+          break;
+        }
+      }
+      if (existing != null && (existing.prompt != prompt || existing.displayName != name)) {
+        final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认覆盖角色？'), content: Text('“$name”已存在，保存会覆盖它的提示词和显示名称。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('覆盖'))])) ?? false;
+        if (!confirmed) return;
+      }
       final role = RoleCard(id: id, displayName: name, prompt: prompt);
       await widget.bridge.saveRoleCard(role);
       if (mounted) setState(() { roleId.text = id; roleName.text = name; editingExisting = true; });
