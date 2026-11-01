@@ -30,6 +30,7 @@ class RuntimeService : Service() {
         super.onCreate()
         serviceAlive = true
         RuntimeEventBus.setContext(this)
+        RuntimeLogTailer.ensureStarted(this)
         coordinator = RuntimeCoordinator(this) { RuntimeProcessController(this) }
         val notifier = RuntimeNotifier(this)
         startForeground(RuntimeNotifier.ID, notifier.build("正在启动 Runtime"))
@@ -58,6 +59,7 @@ class RuntimeService : Service() {
         networkCallback = null
         coordinator?.shutdown()
         coordinator = null
+        RuntimeLogTailer.stopShared()
         stopForeground(STOP_FOREGROUND_REMOVE)
         RuntimeLogRecorder(this).record(RuntimeLogRecorder.Status.STOPPED, "process.stop", "Runtime Service 已停止", 0)
         super.onDestroy()

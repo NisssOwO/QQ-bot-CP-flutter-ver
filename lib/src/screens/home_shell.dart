@@ -16,6 +16,7 @@ import '../services/config_draft.dart';
 import '../services/background_tasks.dart';
 import '../models/update_manifest.dart';
 import '../services/update_service.dart';
+import '../services/release_check.dart';
 import '../theme/theme_controller.dart';
 import '../theme/theme_bridge.dart';
 import '../theme/app_theme_tokens.dart';
@@ -252,7 +253,7 @@ class _HomeShellState extends State<HomeShell> {
     final pages = <Widget>[
       _OverviewPage(state: _state, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
-      _LogPage(logs: _logs, onClear: _clearLogs),
+      _LogPage(logs: _logs, onClear: _clearLogs, bridge: _bridge),
       _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
@@ -448,17 +449,25 @@ const List<(String, String)> _chatCommands = [
 ];
 
 class _LogPage extends StatefulWidget {
-  const _LogPage({required this.logs, required this.onClear});
+  const _LogPage({required this.logs, required this.onClear, required this.bridge});
   final List<RuntimeLogEntry> logs;
   final Future<void> Function() onClear;
+  final RuntimeBridge bridge;
   @override State<_LogPage> createState() => _LogPageState();
 }
 
 class _LogPageState extends State<_LogPage> {
   LogLevel? level;
   String? module;
+  final search = TextEditingController();
   List<RuntimeLogEntry> filtered = const [];
   bool filtering = false;
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
 
   /// 只在日志里实际出现过的模块，避免让用户猜模块名。
   List<String> _moduleOptions() {
@@ -484,19 +493,34 @@ class _LogPageState extends State<_LogPage> {
       'level': entry.level.name,
       'module': entry.module,
     }).toList(), level?.name, selected ?? '');
+    final keyword = search.text.trim().toLowerCase();
     if (!mounted) return;
     setState(() {
-      filtered = indexes.map((index) => snapshot[index]).toList().reversed.toList();
+      filtered = indexes
+          .map((index) => snapshot[index])
+          .where((entry) => keyword.isEmpty || entry.message.toLowerCase().contains(keyword) || entry.module.toLowerCase().contains(keyword))
+          .toList()
+          .reversed
+          .toList();
       filtering = false;
     });
   }
   String _redacted(String value) => value
       .replaceAll(RegExp(r'(bearer\s+|api[_-]?key\s*[:=]\s*|app[_-]?secret\s*[:=]\s*|authorization\s*[:=]\s*|secret\s*[:=]\s*|token\s*[:=]\s*)[^\s,;]+', caseSensitive: false), r'\1[REDACTED]')
       .replaceAll(RegExp(r'("(?:api[_-]?key|app[_-]?secret|token|authorization|bearer)"\s*:\s*")[^"]*(")', caseSensitive: false), r'\1[REDACTED]\2');
+  /// 诊断包要能独立说明“哪台设备、哪个版本、启动到哪一步”，否则光有日志也对不上。
   Future<void> _export() async {
-    final content = widget.logs.map((entry) => '${entry.time.toIso8601String()} [${entry.level.name}] ${entry.module} ${entry.errorCode == null ? '' : '[${entry.errorCode}] '}${_redacted(entry.message)}').join('\n');
-    await Clipboard.setData(ClipboardData(text: content));
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制脱敏日志')));
+    final info = await widget.bridge.appInfo();
+    final header = [
+      'QQ-bot-CP 运行诊断',
+      '应用：${info['versionName'] ?? '?'} (${info['versionCode'] ?? '?'}) · ${info['abi'] ?? '?'}',
+      '导出时间：${DateTime.now().toIso8601String()}',
+      '日志条数：${widget.logs.length}',
+      '',
+    ].join('\n');
+    final body = widget.logs.map((entry) => '${entry.time.toIso8601String()} [${entry.level.name}] ${entry.module} ${entry.errorCode == null ? '' : '[${entry.errorCode}] '}${_redacted(entry.message)}').join('\n');
+    await Clipboard.setData(ClipboardData(text: '$header$body'));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制诊断信息')));
   }
   /// Clearing is destructive and cannot be undone from the page, so ask once up front.
   Future<void> _confirmClear() async {
@@ -527,8 +551,9 @@ class _LogPageState extends State<_LogPage> {
         const SizedBox(width: 8),
         Expanded(child: DropdownButtonFormField<String?>(key: ValueKey('module-${module ?? 'all'}-${_moduleOptions().length}'), initialValue: _moduleOptions().contains(module) ? module : null, decoration: const InputDecoration(labelText: '模块', border: OutlineInputBorder()), items: [const DropdownMenuItem<String?>(value: null, child: Text('全部模块')), for (final name in _moduleOptions()) DropdownMenuItem<String?>(value: name, child: Text(name))], onChanged: (value) { setState(() => module = value); _applyFilter(); })),
         IconButton(tooltip: '清空日志', onPressed: widget.logs.isEmpty ? null : _confirmClear, icon: const Icon(Icons.delete_sweep)),
-        IconButton(tooltip: '复制脱敏日志', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
+        IconButton(tooltip: '复制诊断信息', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
       ])),
+      Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 4), child: TextField(controller: search, onChanged: (_) => _applyFilter(), decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.search, size: 18), hintText: '搜索日志内容或模块', border: OutlineInputBorder()))),
       Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = presentation.muted ? Theme.of(context).colorScheme.outline : _levelColor(context, presentation.level); return ListTile(leading: Icon(presentation.muted ? Icons.do_not_disturb_on_outlined : _levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${formatLogTime(entry.time)} · ${presentation.level.name}${presentation.muted ? '（已忽略）' : ''} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
     ]);
   }
@@ -776,6 +801,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   List<ThemeSettings> recentThemes = const [];
   List<Map<String, Object?>> backups = const [];
   bool checkingUpdate = false;
+  ReleaseCheckResult? releaseCheck;
   bool downloading = false;
   double downloadProgress = 0;
   bool downloadPaused = false;
@@ -797,14 +823,32 @@ class _SettingsPageState extends State<_SettingsPage> {
     final reason = result['reason'];
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(status == 'permission_required' ? '请先允许本应用安装未知来源应用' : status == 'installer_opened' ? '已打开系统安装器' : status == 'cancelled' ? '已取消选择' : status == 'rejected' ? '已拒绝更新：$reason' : '更新操作：$status')));
   }
+  /// 直接问 GitHub 的 latest release，并和已安装版本比较；只有确实更新时才给下载入口。
   Future<void> _checkUpdate() async {
     setState(() => checkingUpdate = true);
     try {
-      final value = await const UpdateService().check(defaultUpdateManifestUrl);
-      if (mounted) setState(() => manifest = value);
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('检查更新失败：$error')));
-    } finally { if (mounted) setState(() => checkingUpdate = false); }
+      final result = await const ReleaseChecker().run(info['versionName'] ?? '');
+      if (!mounted) return;
+      setState(() {
+        releaseCheck = result;
+        manifest = result.manifest;
+        downloadController = null;
+        downloadPaused = false;
+        downloadProgress = 0;
+        downloading = false;
+      });
+    } finally {
+      if (mounted) setState(() => checkingUpdate = false);
+    }
+  }
+
+  /// 已是最新时也要给出可读的结论，而不是把清单当更新展示。
+  String _checkSummary(ReleaseCheckResult result) {
+    final published = result.publishedAt;
+    final when = published == null ? '' : ' · 最新版发布于 ${published.toLocal().toString().substring(0, 10)}';
+    if (result.failed) return '${result.error}';
+    if (result.hasUpdate) return '当前 ${result.installed} → ${result.latest}$when';
+    return '当前 ${result.installed} 已经是最新版本$when';
   }
   Future<void> _downloadAndInstall() async {
     final value = manifest;
@@ -854,11 +898,17 @@ class _SettingsPageState extends State<_SettingsPage> {
     ]),
     const Text('系统可能限制后台活动；请按需允许本应用后台运行和通知。', style: TextStyle(color: Colors.white60)),
     const SizedBox(height: 12),
-    TextField(controller: updateUrl, readOnly: true, decoration: const InputDecoration(labelText: '内置更新清单', helperText: '应用固定从官方清单检查更新', border: OutlineInputBorder())),
     const SizedBox(height: 8),
     FilledButton.tonalIcon(onPressed: checkingUpdate ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
+    if (releaseCheck != null)
+      Card(child: ListTile(
+        leading: Icon(releaseCheck!.failed ? Icons.cloud_off : releaseCheck!.hasUpdate ? Icons.system_update : Icons.verified),
+        title: Text(releaseCheck!.failed ? '检查更新失败' : releaseCheck!.hasUpdate ? '发现新版本 ${releaseCheck!.latest}' : '已是最新版本'),
+        subtitle: Text(_checkSummary(releaseCheck!)),
+        isThreeLine: true,
+      )),
     if (manifest != null) ...[
-      Card(child: ListTile(title: Text('最新版本 ${manifest!.versionName} · ${manifest!.abi}'), subtitle: Text('${manifest!.releaseNotes}\n大小：${manifest!.sizeLabel}\nSHA-256：${manifest!.sha256}'), isThreeLine: true)),
+      Card(child: ListTile(title: Text('新版本 ${manifest!.versionName} · ${manifest!.abi}'), subtitle: Text('${manifest!.releaseNotes}\n大小：${manifest!.sizeLabel}\nSHA-256：${manifest!.sha256}'), isThreeLine: true)),
       if (downloading) ...[LinearProgressIndicator(value: downloadProgress), Row(children: [Expanded(child: Text('下载中 ${(downloadProgress * 100).toStringAsFixed(0)}%')), IconButton(tooltip: '暂停', onPressed: _pauseDownload, icon: const Icon(Icons.pause)), IconButton(tooltip: '取消', onPressed: _cancelDownload, icon: const Icon(Icons.close))])],
       if (!downloading) FilledButton.icon(onPressed: manifest!.apkUrl.isEmpty ? null : _downloadAndInstall, icon: Icon(downloadPaused ? Icons.play_arrow : Icons.download), label: Text(downloadPaused ? '继续下载' : '下载并安装更新')),
     ],

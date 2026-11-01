@@ -135,13 +135,21 @@ class RuntimeProcessController(private val context: Context) {
                 var captured = 0
                 for (line in lines) {
                     if (booted.count > 0) booted.countDown()
-                    val parsed = RuntimeLogParser.parse(line, source)
-                    recorder.stream(parsed.level, parsed.module, line, parsed.qq, parsed.ai, parsed.network, parsed.errorCode)
+                    // 正常情况日志由 RuntimeLogTailer 从 logs/runtime.log 读取，管道只负责
+                    // 启动握手和退出诊断；只有文件日志没能建立时才退回读管道。
+                    if (LogTapHealth.pipeFallback) {
+                        val parsed = RuntimeLogParser.parse(line, source)
+                        recorder.stream(parsed.level, parsed.module, line, parsed.qq, parsed.ai, parsed.network, parsed.errorCode)
+                    }
                     if (source == "stderr" && captured < 20 && line.isNotBlank()) {
                         captured++
                         stderrSample.add(line.take(240))
                     }
                 }
+            }
+            // 说到一半就没声的管道正是"日志只有启动阶段"的成因，记一条，方便下次判断。
+            if (process?.isAlive == true) {
+                recorder.stream("warn", "runtime", "Node 的输出管道已关闭，之后的日志改为从 logs/runtime.log 读取", null, null, null, "runtime_pipe_closed")
             }
         } catch (_: Exception) {
         }

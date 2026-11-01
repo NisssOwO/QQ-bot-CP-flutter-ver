@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 
 const root = process.env.SHINY_RUNTIME_ROOT ?? process.cwd();
 
@@ -7,6 +7,19 @@ const redact = text => text
   .replace(/(APPSECRET|API[_-]?KEY|TOKEN|SECRET)=\S+/gi, '$1=[redacted]')
   .replace(/("(?:api[_-]?key|app[_-]?secret|token|authorization|bearer)"\s*:\s*")[^"]*(")/gi, '$1[redacted]$2')
   .replace(/(Bearer\s+)[A-Za-z0-9._~+\-/]+=*/gi, '$1[redacted]');
+
+const logDir = `${root}/logs`;
+const logFile = `${logDir}/runtime.log`;
+
+/** Host-side milestones, so the file explains a run even when the child prints nothing. */
+function logHost(message) {
+  try {
+    mkdirSync(logDir, { recursive: true });
+    appendFileSync(logFile, `${new Date().toISOString()}|host|${redact(message)}\n`);
+  } catch {
+    // File logging is best effort; the pipe and the parent app still show the stage.
+  }
+}
 
 let child = null;
 let childSeenOutput = false;
@@ -29,12 +42,19 @@ try {
       DSH_CWD: root,
       // Android's app-private filesystem can reject hard links even within one
       // directory. Preload a small compatibility shim for atomic writers.
-      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${root}/android-fs-compat.cjs`].filter(Boolean).join(' '),
+      NODE_OPTIONS: [
+        process.env.NODE_OPTIONS,
+        `--require=${root}/android-fs-compat.cjs`,
+        // Keeps a durable copy of everything DSH prints; see android-log-tap.cjs.
+        `--require=${root}/android-log-tap.cjs`,
+      ].filter(Boolean).join(' '),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   // The host waits for this first line to distinguish "node started" from a
   // silent process, so it must not wait for DSH to finish booting.
+  // 文件里先留一行启动标记：日志页能看到它，就说明落盘钩子确实生效了。
+  logHost(`runtime-entry boot pid=${child.pid ?? 'unknown'} profile=${profile}`);
   process.stdout.write(`QQBOT_BOOTING pid=${child.pid ?? 'unknown'}\n`);
   child.stdout.on('data', chunk => {
     childSeenOutput = true;
@@ -49,6 +69,7 @@ try {
     process.exit(1);
   });
   child.on('exit', (code, signal) => {
+    logHost(`dsh exited code=${code ?? 'null'} signal=${signal ?? 'none'} output=${childSeenOutput ? 'yes' : 'no'}`);
     // Nothing is usually printed when DSH exits this early, so the host gets a
     // reason it can show instead of an empty stderr sample.
     if (!childSeenOutput) process.stderr.write(`DSH exited before any output (code=${code ?? 'null'} signal=${signal ?? 'none'})\n`);
