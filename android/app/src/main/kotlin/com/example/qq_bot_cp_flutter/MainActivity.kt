@@ -52,6 +52,7 @@ class MainActivity : FlutterActivity() {
                 "requestNotificationPermission" -> requestNotificationPermission(result)
                 "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", true).apply(); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
                 "restartRuntime" -> {
+                    ensureRuntimePresets()
                     val prefs = getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE)
                     prefs.edit().putBoolean("userStopped", false).apply()
                     // A slow first extraction is still running: restarting now would throw
@@ -141,6 +142,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startRuntimeService() {
+        ensureRuntimePresets()
         getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply()
         val restricted = RuntimeLauncher.backgroundRestricted(this)
         getSharedPreferences("runtime", MODE_PRIVATE).edit()
@@ -481,6 +483,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun roleCards(): List<Map<String, Any>> {
+        ensureRuntimePresets()
         val result = mutableListOf<Map<String, Any>>()
         val seenIds = mutableSetOf<String>()
         val presets = File(filesDir, "runtime/presets")
@@ -754,6 +757,24 @@ class MainActivity : FlutterActivity() {
             File(directory, "preset.$id.md").writeText(prompt, Charsets.UTF_8)
             File(directory, "preset.$id.json").writeText(JSONObject().put("id", id).put("displayName", card.optString("displayName", id)).put("builtin", false).toString(), Charsets.UTF_8)
         }
+    }
+
+    /** 设置里的角色卡必须有一份对应的 presets 文件，否则 Runtime 拿到的是空人格。 */
+    private fun ensureRuntimePresets(): List<String> {
+        val cards = mutableListOf<RolePresetCard>()
+        val stored = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
+        for (index in 0 until stored.length()) {
+            val item = stored.optJSONObject(index) ?: continue
+            cards += RolePresetCard(item.optString("id", ""), item.optString("displayName", ""), item.optString("prompt", ""))
+        }
+        val role = getSharedPreferences("default-role", MODE_PRIVATE)
+        val defaultId = role.getString("id", "").orEmpty()
+        if (defaultId.isNotBlank() && cards.none { it.id == defaultId }) {
+            cards += RolePresetCard(defaultId, role.getString("name", "").orEmpty(), role.getString("prompt", "").orEmpty())
+        }
+        val repaired = RolePresetSync.sync(File(filesDir, "runtime/presets"), cards)
+        if (repaired.isNotEmpty()) RuntimeEventBus.emit("info", "角色", "已把缺失的角色卡写回运行目录：${repaired.joinToString("、")}")
+        return repaired
     }
 
     private fun removeCustomRuntimePresets() {
