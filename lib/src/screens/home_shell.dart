@@ -10,6 +10,7 @@ import '../models/role_card.dart';
 import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
 import '../services/public_ip_service.dart';
+import '../services/startup_stats.dart';
 import '../services/background_tasks.dart';
 import '../models/update_manifest.dart';
 import '../services/update_service.dart';
@@ -222,9 +223,9 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final startupDurations = _logs.where((entry) => entry.module == 'runtime' && entry.message.startsWith('restart.complete') && entry.elapsedMs != null).map((entry) => entry.elapsedMs!).where((value) => value > 0).toList();
+    final startupStats = summarizeStartup(_logs);
     final pages = <Widget>[
-      _OverviewPage(state: _state, startupDurations: startupDurations, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
+      _OverviewPage(state: _state, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs),
       _RolePage(bridge: _bridge),
@@ -250,9 +251,9 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.startupDurations, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
+  const _OverviewPage({required this.state, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
   final RuntimeState state;
-  final List<int> startupDurations;
+  final StartupStats startupStats;
   final String publicIp;
   final String publicIpv6;
   final String checkedAt;
@@ -268,9 +269,9 @@ class _OverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(cacheExtent: 5000, padding: const EdgeInsets.fromLTRB(16, 16, 16, 144), children: [
-        Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state, startupDurations)), trailing: Text(_formatDuration(state.elapsedMs)))),
+        Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state, startupStats)), trailing: Text(_formatDuration(state.elapsedMs)))),
         if (state.status == RuntimeStatus.failed) Card(child: ListTile(leading: Icon(Icons.error_outline, color: AppThemeTokens.of(context).error), title: Text('启动失败：${state.phase}'), subtitle: Text('${state.message.isEmpty ? '请打开日志查看详细信息' : state.message}${state.errorCode == null ? '' : '（错误码 ${state.errorCode}）'}${state.exitCode == null ? '' : '（退出码 ${state.exitCode}）'}\n建议：检查配置、网络和日志中的错误码后重试。'))),
-        Card(child: ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('启动耗时统计'), subtitle: Text(startupDurations.isEmpty ? '暂无完整启动记录，下一次启动后开始统计' : '最近一次：${_formatDuration(startupDurations.last)} · 历史平均：${_formatDuration((startupDurations.reduce((a, b) => a + b) / startupDurations.length).round())} · 样本 ${startupDurations.length} 次'))),
+        Card(child: ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('启动耗时统计'), subtitle: Text(_startupSummary(startupStats)))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -323,7 +324,7 @@ class _OverviewPage extends StatelessWidget {
     RuntimeStatus.stopped => Theme.of(context).colorScheme.outline,
   };
 
-  static String _phaseDescription(RuntimeState state, List<int> startupDurations) {
+  static String _phaseDescription(RuntimeState state, StartupStats startupStats) {
     if (state.status == RuntimeStatus.stopped && state.message.isEmpty) return '还没有启动 Runtime';
     final estimate = switch (state.phase) {
       'restart.begin' || 'process.stop' => '约 1 秒',
@@ -333,9 +334,29 @@ class _OverviewPage extends StatelessWidget {
       'session.restore' || 'ready' || 'restart.complete' => '约 1 秒',
       _ => null,
     };
-    final history = startupDurations.isEmpty ? null : '历史平均 ${_formatDuration((startupDurations.reduce((a, b) => a + b) / startupDurations.length).round())}';
+    final history = startupStats.cachedAverage ?? startupStats.unpackedAverage;
+    final historyText = history == null ? null : '历史平均 ${_formatDuration(history)}';
     final current = state.message.isEmpty ? state.phase : '${state.phase}：${state.message}';
-    return state.status != RuntimeStatus.starting ? current : '$current · ${history ?? '预计 $estimate'}';
+    return state.status != RuntimeStatus.starting ? current : '$current · ${historyText ?? '预计 $estimate'}';
+  }
+
+  /// Splits the numbers so a first launch that spends minutes unpacking does not
+  /// drag down the estimate of the sub-second launches after it.
+  static String _startupSummary(StartupStats stats) {
+    if (stats.isEmpty) return '暂无完整启动记录，下一次启动后开始统计';
+    final lines = <String>[
+      '最近一次：${_formatDuration(stats.lastMs ?? 0)}${stats.lastUnpacked ? '（含解包）' : ''}',
+    ];
+    final unpackedAverage = stats.unpackedAverage;
+    if (unpackedAverage != null) {
+      lines.add('解包启动平均：${_formatDuration(unpackedAverage)} · 样本 ${stats.unpacked.length} 次');
+    }
+    final cachedAverage = stats.cachedAverage;
+    if (cachedAverage != null) {
+      lines.add('日常启动平均：${_formatDuration(cachedAverage)} · 样本 ${stats.cached.length} 次');
+    }
+    lines.add(stats.reconnects == 0 ? '网络重连：本次记录内没有发生' : '网络重连：记录 ${stats.reconnects} 次重试');
+    return lines.join('\n');
   }
 
   static String _formatDuration(int ms) {
