@@ -21,7 +21,7 @@ object RuntimeAssetInstaller {
         if (ready) {
             refreshEntry(context, target)
             refreshProfile(context, target)
-            refreshRolePresets(context, target)
+            refreshProfilePlugins(context, target)
             refreshPiAiManifest(context, target)
             refreshOpenAiParser(context, target)
             refreshTurnErrorNormalizer(context, target)
@@ -39,7 +39,7 @@ object RuntimeAssetInstaller {
         }
         refreshEntry(context, target)
         refreshProfile(context, target)
-        refreshRolePresets(context, target)
+        refreshProfilePlugins(context, target)
         refreshPiAiManifest(context, target)
         refreshOpenAiParser(context, target)
         refreshTurnErrorNormalizer(context, target)
@@ -84,20 +84,26 @@ object RuntimeAssetInstaller {
     }
 
     /**
-     * 已安装的机器上 copyTree 会跳过已存在的文件，角色插件换新后不会自动生效。
-     * session-manager 现在每轮调用 presets.prompt()，所以这里单独覆盖这份插件。
+     * 已安装的机器上 copyTree 会跳过已存在的文件，本应用自带的 profile 插件换新后不会自动生效。
+     * session-manager 现在每轮调用 presets.prompt()，web-tools 是新增的联网工具，两份都要覆盖。
      */
-    private fun refreshRolePresets(context: Context, target: File) {
-        val relative = "profiles/qqbot/node_modules/@shiny-colors/role-presets/index.js"
+    private fun refreshProfilePlugins(context: Context, target: File) {
         val source = if (hasAssets(context, "runtime/dsh-home")) "runtime/dsh-home" else "runtime/assets-dsh-home"
-        val output = File(target, "dsh-home").resolve(relative)
-        try {
-            context.assets.open("$source/$relative").use { input ->
-                output.parentFile?.mkdirs()
-                FileOutputStream(output).use { file -> input.copyTo(file, 16 * 1024) }
+        val files = listOf(
+            "profiles/qqbot/node_modules/@shiny-colors/role-presets/index.js",
+            "profiles/qqbot/node_modules/@shiny-colors/web-tools/index.js",
+            "profiles/qqbot/node_modules/@shiny-colors/web-tools/package.json",
+        )
+        for (relative in files) {
+            val output = File(target, "dsh-home").resolve(relative)
+            try {
+                context.assets.open("$source/$relative").use { input ->
+                    output.parentFile?.mkdirs()
+                    FileOutputStream(output).use { file -> input.copyTo(file, 16 * 1024) }
+                }
+            } catch (_: Exception) {
+                // 旧 bundle 没有这份插件时保持原样，运行时只会少一个能力。
             }
-        } catch (_: Exception) {
-            // 旧 bundle 没有这份插件时保持原样，运行时只会少一次兜底注入。
         }
     }
 

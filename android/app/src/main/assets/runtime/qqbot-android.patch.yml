@@ -8,6 +8,8 @@
           trust: user
       includeUserRoot: true
       default: !!js "process.env.LLM_PRESET || ''"
+  - id: web-tools
+    name: '@shiny-colors/web-tools'
 
 - id: llm-pi-ai
   config:

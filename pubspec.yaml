@@ -1,7 +1,7 @@
 name: qq_bot_cp
 description: Flutter UI and platform shell for QQ-bot-CP.
 publish_to: none
-version: 0.1.5+6
+version: 0.1.6+7
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
