@@ -44,6 +44,7 @@ object NativeExec {
     const val CODE_BUNDLE_INCOMPLETE = "runtime_bundle_incomplete"
 
     fun codeFor(error: Throwable): String {
+        if (error is RuntimeAssetInstaller.IncompleteBundleException) return CODE_BUNDLE_INCOMPLETE
         val text = (error.message ?: error.toString()).lowercase()
         return when {
             text.contains("incomplete") || text.contains("no such file") || text.contains("enoent") -> CODE_BUNDLE_INCOMPLETE
@@ -71,6 +72,8 @@ class RuntimeCoordinator(
     private var startedAt = 0L
     private var lastPhase = ""
     private var reconnectAttempts = 0
+    private var lastExtensionAt = 0L
+    private var lastExtensionReport = 0L
 
     fun start(source: String) {
         val mine = synchronized(this) {
@@ -134,7 +137,15 @@ class RuntimeCoordinator(
             controller?.stop()
             controller = null
             record(Status.STARTING, "runtime.prepare", "正在准备 Node/DSH 运行文件", mine = mine)
-            val root = RuntimeAssetInstaller.install(service)
+            val startedAt = System.currentTimeMillis()
+            val root = RuntimeAssetInstaller.install(service) { copied ->
+                lastExtensionAt = System.currentTimeMillis()
+                if (lastExtensionAt - lastExtensionReport < 1000) return@install
+                lastExtensionReport = lastExtensionAt
+                record(Status.STARTING, "runtime.prepare", "正在准备 Node/DSH 运行文件（已解包 $copied 个文件）", mine = mine)
+            }
+            val seconds = (System.currentTimeMillis() - startedAt) / 1000
+            record(Status.STARTING, "runtime.prepare", "运行文件就绪（解包 ${root.name}，耗时 ${seconds} 秒）", mine = mine)
             record(Status.STARTING, "config.load", "读取公开配置和 Keystore 凭据（${root.name}）", mine = mine)
             record(Status.STARTING, "plugin.load", "正在加载 DSH profile 和 QQ/角色插件", mine = mine)
             if (!runtime.credentialsConfigured()) {

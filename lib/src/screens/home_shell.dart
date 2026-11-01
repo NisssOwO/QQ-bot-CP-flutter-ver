@@ -28,6 +28,10 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   final _bridge = RuntimeBridge();
   final _logs = <RuntimeLogEntry>[];
+  Timer? _watchdog;
+  String? _lastStageSignature;
+  DateTime? _lastStageProgressAt;
+  bool _recovering = false;
   StreamSubscription<RuntimeLogEntry>? _subscription;
   RuntimeState _state = const RuntimeState();
   PublicConfig _publicConfig = const PublicConfig();
@@ -62,6 +66,49 @@ class _HomeShellState extends State<HomeShell> {
     _refreshSessionRoles();
     _refreshPublicIp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartRuntime());
+    _startStateWatchdog();
+  }
+
+  /// A start whose persisted stage stops advancing for this long is reported instead of
+  /// leaving the card on "初始化中" until the user restarts by hand.
+  static const Duration _staleStartAfter = Duration(seconds: 60);
+
+  void _startStateWatchdog() {
+    _watchdog?.cancel();
+    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) return;
+      final state = _state;
+      if (state.status != RuntimeStatus.starting && state.status != RuntimeStatus.reconnecting) {
+        _lastStageProgressAt = null;
+        return;
+      }
+      // A start whose stage keeps advancing is progressing. Before the service ever
+      // writes a stamp, only a change in text counts as progress.
+      final signature = state.stageAt > 0
+          ? '${state.status.name}|${state.phase}|${state.stageAt}'
+          : '${state.status.name}|${state.phase}|${state.message}';
+      final now = DateTime.now();
+      final last = _lastStageProgressAt;
+      if (last == null || signature != _lastStageSignature) {
+        _lastStageSignature = signature;
+        _lastStageProgressAt = now;
+        return;
+      }
+      if (now.difference(last) < _staleStartAfter) return;
+      _lastStageProgressAt = null;
+      if (_recovering) return;
+      _recovering = true;
+      try {
+        await _restart(quiet: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('启动卡在「${state.phase}」超过 60 秒，已自动重启 Runtime'),
+          ));
+        }
+      } finally {
+        _recovering = false;
+      }
+    });
   }
 
   Future<void> _autoStartRuntime() async {
@@ -71,8 +118,8 @@ class _HomeShellState extends State<HomeShell> {
       final state = await _bridge.state();
       // Show the Flutter shell first, then recover a service that was killed by Android,
       // an APK update, or a task swipe. Respect an explicit user stop.
-      if (config.qqConfigured && config.llmConfigured && !state.processAlive && !state.userStopped && state.status != RuntimeStatus.starting) {
-        await _restart();
+      if (config.qqConfigured && config.llmConfigured && !state.processAlive && !state.userStopped && (state.status == RuntimeStatus.stopped || state.status == RuntimeStatus.failed || state.status == RuntimeStatus.starting)) {
+        await _restart(quiet: true);
       }
     } catch (_) {}
   }
@@ -90,6 +137,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    _watchdog?.cancel();
     _subscription?.cancel();
     super.dispose();
   }
@@ -110,7 +158,7 @@ class _HomeShellState extends State<HomeShell> {
     try { final roles = await _bridge.sessionRoleStatus(); if (mounted) setState(() => _sessionRoles = roles); } catch (_) {}
   }
 
-  Future<void> _restart() async {
+  Future<void> _restart({bool quiet = false}) async {
     try {
       final config = await _bridge.config();
       final missing = <String>[];
@@ -123,12 +171,14 @@ class _HomeShellState extends State<HomeShell> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('尚未启动：请先填写 ${missing.join('、')}')));
         return;
       }
-      final permission = await _bridge.requestNotificationPermission();
-      if (permission == 'denied' && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('通知权限被拒绝，Runtime 仍会启动，但看不到常驻通知。'),
-          action: SnackBarAction(label: '去设置', onPressed: () => _bridge.openNotificationSettings()),
-        ));
+      if (!quiet) {
+        final permission = await _bridge.requestNotificationPermission();
+        if (permission == 'denied' && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('通知权限被拒绝，Runtime 仍会启动，但看不到常驻通知。'),
+            action: SnackBarAction(label: '去设置', onPressed: () => _bridge.openNotificationSettings()),
+          ));
+        }
       }
       setState(() => _state = _state.copyWith(status: RuntimeStatus.starting, phase: 'restart.begin', message: '正在启动 Runtime'));
       await _bridge.restart();

@@ -68,6 +68,7 @@ class RuntimeBridge {
       aiFailureCount: (raw['aiFailureCount'] as num?)?.toInt() ?? 0,
       processAlive: raw['processAlive'] == true,
       userStopped: raw['userStopped'] == true,
+      stageAt: (raw['stageAt'] as num?)?.toInt() ?? 0,
     );
   }
 
