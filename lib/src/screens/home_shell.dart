@@ -20,6 +20,7 @@ import '../services/release_check.dart';
 import '../theme/theme_controller.dart';
 import '../theme/theme_bridge.dart';
 import '../theme/app_theme_tokens.dart';
+import '../theme/app_theme.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.onThemeChanged});
@@ -40,7 +41,6 @@ class _HomeShellState extends State<HomeShell> {
   RuntimeState _state = const RuntimeState();
   PublicConfig _publicConfig = const PublicConfig();
   int _index = 0;
-  Map<String, String> _sessionRoles = const {};
   String _publicIp = '未检测';
   String _publicIpv6 = '未检测';
   String _ipCheckedAt = '';
@@ -161,7 +161,6 @@ class _HomeShellState extends State<HomeShell> {
     try { final config = await _bridge.config(); if (mounted) setState(() => _publicConfig = config); } catch (_) {}
   }
   Future<void> _refreshSessionRoles() async {
-    try { final roles = await _bridge.sessionRoleStatus(); if (mounted) setState(() => _sessionRoles = roles); } catch (_) {}
   }
 
   Future<void> _restart({bool quiet = false}) async {
@@ -257,23 +256,88 @@ class _HomeShellState extends State<HomeShell> {
       _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
+    // 手机上用底部导航，平板横过来后换成左侧导航加更宽的卡片。
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final tokens = AppSurfaceTokens.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('QQ-bot-CP'), actions: [IconButton(onPressed: () async { await _refreshState(); await _refreshConfig(); }, tooltip: '刷新状态和配置', icon: const Icon(Icons.refresh))]),
-      body: pages[_index],
-      floatingActionButton: _index == 0 ? FloatingActionButton.extended(onPressed: _restart, icon: const Icon(Icons.restart_alt), label: const Text('重启 Runtime')) : null,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: '总览'),
-          NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'AI'),
-          NavigationDestination(icon: Icon(Icons.article_outlined), selectedIcon: Icon(Icons.article), label: '日志'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: '角色'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: '设置'),
+      appBar: AppBar(
+        title: const Text('QQ-bot-CP'),
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await _refreshState();
+              await _refreshConfig();
+            },
+            tooltip: '刷新状态和配置',
+            icon: const Icon(Icons.refresh, size: 20),
+          ),
         ],
       ),
+      body: wide
+          ? Row(children: [
+              _NavRail(selected: _index, onSelected: (value) => setState(() => _index = value)),
+              VerticalDivider(width: 1, color: tokens.outline),
+              Expanded(child: pages[_index]),
+            ])
+          : pages[_index],
+      bottomNavigationBar: wide
+          ? null
+          : NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (value) => setState(() => _index = value),
+              destinations: [
+                for (final item in _navItems) NavigationDestination(icon: Icon(item.$1), selectedIcon: Icon(item.$2), label: item.$3),
+              ],
+            ),
     );
   }
+}
+
+
+
+/// 页面级滚动容器：手机单列，平板（>=1100）自动排成两列并限制最大宽度。
+/// 用 [_FullWidth] 包住的卡片在平板下占满整行（例如状态 hero）。
+Widget _pageBody(BuildContext context, List<Widget> children) {
+  final wide = MediaQuery.sizeOf(context).width >= 1100;
+  Widget unwrap(Widget child) => child is _FullWidth ? child.child : child;
+  final content = wide
+      ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          for (final child in children)
+            if (child is _FullWidth) Padding(padding: const EdgeInsets.only(bottom: 12), child: child.child),
+          _twoColumns([for (final child in children) if (child is! _FullWidth) child]),
+        ])
+      : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (final child in children) unwrap(child)]);
+  return SingleChildScrollView(
+    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+    child: Center(
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1320), child: content),
+    ),
+  );
+}
+
+class _FullWidth extends StatelessWidget {
+  const _FullWidth(this.child);
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
+Widget _twoColumns(List<Widget> children) {
+  final cards = [
+    for (final child in children)
+      if (child is! SizedBox) child,
+  ];
+  final left = <Widget>[];
+  final right = <Widget>[];
+  for (var i = 0; i < cards.length; i++) {
+    (i.isEven ? left : right).add(Padding(padding: const EdgeInsets.only(bottom: 12), child: cards[i]));
+  }
+  return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left)),
+    const SizedBox(width: 12),
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
+  ]);
 }
 
 class _OverviewPage extends StatelessWidget {
@@ -295,49 +359,143 @@ class _OverviewPage extends StatelessWidget {
   final VoidCallback onRestart;
 
   @override
-  Widget build(BuildContext context) => ListView(cacheExtent: 5000, padding: const EdgeInsets.fromLTRB(16, 16, 16, 144), children: [
-        Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state, startupStats)), trailing: Text(_formatDuration(state.elapsedMs)))),
-        if (state.status == RuntimeStatus.failed) Card(child: ListTile(leading: Icon(Icons.error_outline, color: AppThemeTokens.of(context).error), title: Text('启动失败：${state.phase}'), subtitle: Text('${state.message.isEmpty ? '请打开日志查看详细信息' : state.message}${state.errorCode == null ? '' : '（错误码 ${state.errorCode}）'}${state.exitCode == null ? '' : '（退出码 ${state.exitCode}）'}\n建议：检查配置、网络和日志中的错误码后重试。'))),
-        Card(child: ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('启动耗时统计'), subtitle: Text(_startupSummary(startupStats)))),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Expanded(child: Text('设备公网 IP', style: TextStyle(fontWeight: FontWeight.bold))),
-            IconButton(tooltip: hideIp ? '显示 IP' : '隐藏 IP', onPressed: onToggleHideIp, icon: Icon(hideIp ? Icons.visibility_off : Icons.visibility)),
-            loadingIp ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))) : IconButton(tooltip: '重新检测', onPressed: onRefreshIp, icon: const Icon(Icons.refresh)),
-          ]),
+  Widget build(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    final ready = qqConfigured && llmConfigured;
+    final ipv4Ready = publicIp != '未检测' && publicIp != '无法获取';
+    return _pageBody(context, [
+      _FullWidth(_statusHero(context)),
+      if (state.status == RuntimeStatus.failed) ...[
+        const SizedBox(height: 12),
+        AppCard(
+          title: '启动失败：${state.phase}',
+          trailing: Icon(Icons.error_outline, color: AppThemeTokens.of(context).error),
+          child: Text('${state.message.isEmpty ? '打开日志查看详细信息' : state.message}${state.errorCode == null ? '' : '（错误码 ${state.errorCode}）'}${state.exitCode == null ? '' : '（退出码 ${state.exitCode}）'}', style: TextStyle(fontSize: 13, color: tokens.mutedText)),
+        ),
+      ],
+      const SizedBox(height: 12),
+      AppCard(
+        title: '启动耗时统计',
+        child: Column(children: [
+          _kv(context, '最近一次', '${_formatDuration(startupStats.lastMs ?? 0)}${startupStats.lastUnpacked ? '（含解包）' : ''}'),
+          _kv(context, '解包启动平均', startupStats.unpackedAverage == null ? '—' : '${_formatDuration(startupStats.unpackedAverage!)} · 样本 ${startupStats.unpacked.length} 次'),
+          _kv(context, '日常启动平均', startupStats.cachedAverage == null ? '—' : '${_formatDuration(startupStats.cachedAverage!)} · 样本 ${startupStats.cached.length} 次'),
+          _kv(context, '网络重连', startupStats.reconnects == 0 ? '本次记录内没有发生' : '记录 ${startupStats.reconnects} 次重试', last: true),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '设备公网 IP',
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          TextButton(onPressed: onToggleHideIp, child: Text(hideIp ? '显示' : '隐藏', style: const TextStyle(fontSize: 13))),
+          if (loadingIp)
+            const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+          else
+            IconButton(tooltip: '重新检测', onPressed: onRefreshIp, icon: const Icon(Icons.refresh, size: 18)),
+        ]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _IpLine(label: 'IPv4', value: publicIp, hidden: hideIp, onCopy: onCopyIp),
           _IpLine(label: 'IPv6', value: publicIpv6, hidden: hideIp, onCopy: onCopyIp),
-          if (ipCheckedAt.isNotEmpty) Text('检测时间：$ipCheckedAt${ipChangedAt.isEmpty ? '' : ' · 上次变化：$ipChangedAt'}', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Text('QQ 开放平台按 IP 白名单放行，换 Wi-Fi 或手机流量后地址会变，需要回来重新配置。', style: Theme.of(context).textTheme.bodySmall),
-        ]))),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(qqConfigured && llmConfigured ? '配置已齐全：点击“启动 Runtime”后，应用会依次加载配置、启动服务、连接 QQ，再进入运行状态。' : '首次使用请按顺序完成：1. 填写 AI 接口、模型、Base URL 和 AI 密钥；2. 填写 QQ AppID 与 AppSecret；3. 保存配置；4. 返回这里启动 Runtime。'),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            if (!qqConfigured || !llmConfigured) OutlinedButton.icon(onPressed: onOpenAi, icon: const Icon(Icons.settings), label: const Text('去填写配置')),
-            FilledButton.icon(onPressed: onRestart, icon: const Icon(Icons.play_arrow), label: Text(state.status == RuntimeStatus.online ? '重新启动 Runtime' : '启动 Runtime')),
-          ]),
-        ]))),
-        Card(child: ListTile(title: const Text('QQ 官方机器人'), subtitle: Text(qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret'), leading: Icon(qqConfigured ? Icons.check_circle : Icons.info_outline, color: qqConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-        Card(child: ListTile(title: const Text('AI 接口'), subtitle: Text(llmConfigured ? 'API Key 已配置' : '等待填写 API Key'), leading: Icon(llmConfigured ? Icons.check_circle : Icons.info_outline, color: llmConfigured ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
-          Chip(avatar: const Icon(Icons.chat, size: 16), label: Text('QQ：${state.qqStatus}')),
-          Chip(avatar: const Icon(Icons.auto_awesome, size: 16), label: Text('AI：${state.aiStatus}')),
-          Chip(avatar: const Icon(Icons.wifi, size: 16), label: Text('网络：${state.networkStatus}')),
-          if (state.reconnectAttempts > 0) Chip(label: Text('第 ${state.reconnectAttempts} 次重连 · ${state.nextRetryMs ~/ 1000}s')),
-          if (state.qqFailureCount > 0) Chip(label: Text('QQ 失败 ${state.qqFailureCount} 次')),
-          if (state.aiFailureCount > 0) Chip(label: Text('AI 失败 ${state.aiFailureCount} 次')),
-        ]))),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('聊天指令', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          const Text('点击右侧按钮可逐条复制到 QQ。'),
-          for (final command in _chatCommands) _CommandCopyRow(command: command.$1, description: command.$2),
-        ]))),
-      ]);
+          if (ipCheckedAt.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('检测时间：$ipCheckedAt${ipChangedAt.isEmpty ? '' : ' · 上次变化：$ipChangedAt'}', style: TextStyle(fontSize: 12, color: tokens.mutedText))),
+          if (!hideIp && ipv4Ready) Padding(padding: const EdgeInsets.only(top: 10), child: OutlinedButton.icon(onPressed: () => onCopyIp(publicIp), icon: const Icon(Icons.copy, size: 16), label: const Text('复制 IPv4'))),
+          Padding(padding: const EdgeInsets.only(top: 8), child: Text('QQ 开放平台按白名单放行；换网络后地址会变。', style: TextStyle(fontSize: 12.5, color: tokens.mutedText))),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: 'Runtime 控制',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            !ready
+                ? '还缺 AI 接口或 QQ 凭据，填完再回来启动。'
+                : state.status == RuntimeStatus.online || state.status == RuntimeStatus.starting || state.status == RuntimeStatus.reconnecting
+                    ? 'Runtime 正在运行；重启会重新加载插件、角色卡与配置。'
+                    : '配置已齐全，点上方「重启」即可启动。',
+            style: TextStyle(fontSize: 13, color: tokens.mutedText),
+          ),
+          if (!ready) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(onPressed: onOpenAi, icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('去填写配置')),
+          ],
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(child: Column(children: [
+        _statusLine(context, 'QQ 官方机器人', qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret', qqConfigured),
+        Divider(height: 20, color: tokens.outline),
+        _statusLine(context, 'AI 接口', llmConfigured ? 'API Key 已配置' : '等待填写 API Key', llmConfigured),
+      ])),
+      const SizedBox(height: 12),
+      AppCard(child: Wrap(spacing: 8, runSpacing: 8, children: [
+        _Pill(label: 'QQ：${state.qqStatus}', tone: state.qqStatus == '在线' ? tokens.heroEnd : tokens.mutedText),
+        _Pill(label: 'AI：${state.aiStatus}', tone: state.aiStatus == '在线' ? tokens.heroEnd : tokens.mutedText),
+        _Pill(label: '网络：${state.networkStatus}', tone: state.networkStatus == '在线' ? tokens.heroEnd : tokens.mutedText),
+        if (state.reconnectAttempts > 0) _Pill(label: '第 ${state.reconnectAttempts} 次重连 · ${state.nextRetryMs ~/ 1000}s', tone: AppThemeTokens.of(context).warning),
+        if (state.qqFailureCount > 0) _Pill(label: 'QQ 失败 ${state.qqFailureCount} 次', tone: AppThemeTokens.of(context).warning),
+        if (state.aiFailureCount > 0) _Pill(label: 'AI 失败 ${state.aiFailureCount} 次', tone: AppThemeTokens.of(context).warning),
+      ])),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '聊天指令',
+        subtitle: '点右侧按钮逐条复制到 QQ。',
+        child: Column(children: [for (final command in _chatCommands) _CommandCopyRow(command: command.$1, description: command.$2)]),
+      ),
+    ]);
+  }
+
+  Widget _statusHero(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    final statusColor = _statusColor(context, state.status);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [tokens.heroStart, tokens.heroEnd], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('运行状态', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.85))),
+          const Spacer(),
+          _HeroButton(icon: Icons.restart_alt, label: '重启', onPressed: onRestart),
+        ]),
+        const SizedBox(height: 2),
+        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(_statusLabel(state.status), style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white, height: 1.2)),
+          const Spacer(),
+          Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle, boxShadow: [BoxShadow(color: statusColor.withValues(alpha: 0.6), blurRadius: 8)])),
+            const SizedBox(width: 7),
+            Text(_formatDuration(state.elapsedMs), style: const TextStyle(fontSize: 13, color: Colors.white)),
+          ])),
+        ]),
+        const SizedBox(height: 4),
+        Text(_phaseDescription(state, startupStats), style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.9))),
+      ]),
+    );
+  }
+
+  Widget _statusLine(BuildContext context, String title, String subtitle, bool ok) {
+    final tokens = AppSurfaceTokens.of(context);
+    return Row(children: [
+      Container(width: 8, height: 8, decoration: BoxDecoration(color: ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning, shape: BoxShape.circle)),
+      const SizedBox(width: 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+        Text(subtitle, style: TextStyle(fontSize: 12, color: tokens.mutedText)),
+      ])),
+    ]);
+  }
+
+  Widget _kv(BuildContext context, String label, String value, {bool last = false}) {
+    final tokens = AppSurfaceTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: last ? 0 : 7),
+      child: Row(children: [
+        SizedBox(width: 96, child: Text(label, style: TextStyle(fontSize: 13, color: tokens.mutedText))),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 13.5))),
+      ]),
+    );
+  }
 
   static String _statusLabel(RuntimeStatus status) => switch (status) {
         RuntimeStatus.stopped => '已停止',
@@ -367,27 +525,8 @@ class _OverviewPage extends StatelessWidget {
     };
     final history = startupStats.cachedAverage ?? startupStats.unpackedAverage;
     final historyText = history == null ? null : '历史平均 ${_formatDuration(history)}';
-    final current = state.message.isEmpty ? state.phase : '${state.phase}：${state.message}';
+    final current = state.message.isEmpty ? state.phase : state.message;
     return state.status != RuntimeStatus.starting ? current : '$current · ${historyText ?? '预计 $estimate'}';
-  }
-
-  /// Splits the numbers so a first launch that spends minutes unpacking does not
-  /// drag down the estimate of the sub-second launches after it.
-  static String _startupSummary(StartupStats stats) {
-    if (stats.isEmpty) return '暂无完整启动记录，下一次启动后开始统计';
-    final lines = <String>[
-      '最近一次：${_formatDuration(stats.lastMs ?? 0)}${stats.lastUnpacked ? '（含解包）' : ''}',
-    ];
-    final unpackedAverage = stats.unpackedAverage;
-    if (unpackedAverage != null) {
-      lines.add('解包启动平均：${_formatDuration(unpackedAverage)} · 样本 ${stats.unpacked.length} 次');
-    }
-    final cachedAverage = stats.cachedAverage;
-    if (cachedAverage != null) {
-      lines.add('日常启动平均：${_formatDuration(cachedAverage)} · 样本 ${stats.cached.length} 次');
-    }
-    lines.add(stats.reconnects == 0 ? '网络重连：本次记录内没有发生' : '网络重连：记录 ${stats.reconnects} 次重试');
-    return lines.join('\n');
   }
 
   static String _formatDuration(int ms) {
@@ -398,6 +537,96 @@ class _OverviewPage extends StatelessWidget {
     final minutes = seconds ~/ 60;
     return '$minutes 分 ${((seconds - minutes * 60).round()).toString().padLeft(2, '0')} 秒';
   }
+}
+
+/// 平板宽度下替换底部导航的左侧导航条。
+class _NavRail extends StatelessWidget {
+  const _NavRail({required this.selected, required this.onSelected});
+  final int selected;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    return Container(
+      width: 220,
+      color: tokens.surface,
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (var index = 0; index < _navItems.length; index++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => onSelected(index),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                decoration: BoxDecoration(
+                  color: index == selected ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.18) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(children: [
+                  Icon(index == selected ? _navItems[index].$2 : _navItems[index].$1, size: 20, color: index == selected ? const Color(0xFFE6EDF0) : tokens.mutedText),
+                  const SizedBox(width: 12),
+                  Text(_navItems[index].$3, style: TextStyle(fontSize: 14, fontWeight: index == selected ? FontWeight.w700 : FontWeight.w500, color: index == selected ? const Color(0xFFE6EDF0) : tokens.mutedText)),
+                ]),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+const List<(IconData, IconData, String)> _navItems = [
+  (Icons.dashboard_outlined, Icons.dashboard, '总览'),
+  (Icons.auto_awesome_outlined, Icons.auto_awesome, 'AI'),
+  (Icons.article_outlined, Icons.article, '日志'),
+  (Icons.person_outline, Icons.person, '角色'),
+  (Icons.settings_outlined, Icons.settings, '设置'),
+];
+
+/// 状态卡右上角的小胶囊按钮，避免悬浮按钮压住下面的卡片。
+class _HeroButton extends StatelessWidget {
+  const _HeroButton({required this.icon, required this.label, required this.onPressed});
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white.withValues(alpha: 0.18),
+        shape: StadiumBorder(side: BorderSide(color: Colors.white.withValues(alpha: 0.4))),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(icon, size: 16, color: Colors.white),
+              const SizedBox(width: 5),
+              Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white)),
+            ]),
+          ),
+        ),
+      );
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, required this.tone});
+  final String label;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        decoration: BoxDecoration(
+          color: tone.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: tone.withValues(alpha: 0.35)),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 12, color: tone)),
+      );
 }
 
 /// One address row inside the public IP card. Long addresses get their own line so the
@@ -545,16 +774,60 @@ class _LogPageState extends State<_LogPage> {
   };
   @override
   Widget build(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
     return Column(children: [
-      Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 4), child: Row(children: [
-        Expanded(child: DropdownButtonFormField<LogLevel?>(value: level, decoration: const InputDecoration(labelText: '级别', border: OutlineInputBorder()), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) { setState(() => level = value); _applyFilter(); })),
-        const SizedBox(width: 8),
-        Expanded(child: DropdownButtonFormField<String?>(key: ValueKey('module-${module ?? 'all'}-${_moduleOptions().length}'), initialValue: _moduleOptions().contains(module) ? module : null, decoration: const InputDecoration(labelText: '模块', border: OutlineInputBorder()), items: [const DropdownMenuItem<String?>(value: null, child: Text('全部模块')), for (final name in _moduleOptions()) DropdownMenuItem<String?>(value: name, child: Text(name))], onChanged: (value) { setState(() => module = value); _applyFilter(); })),
-        IconButton(tooltip: '清空日志', onPressed: widget.logs.isEmpty ? null : _confirmClear, icon: const Icon(Icons.delete_sweep)),
-        IconButton(tooltip: '复制诊断信息', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
-      ])),
-      Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 4), child: TextField(controller: search, onChanged: (_) => _applyFilter(), decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.search, size: 18), hintText: '搜索日志内容或模块', border: OutlineInputBorder()))),
-      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = presentation.muted ? Theme.of(context).colorScheme.outline : _levelColor(context, presentation.level); return ListTile(leading: Icon(presentation.muted ? Icons.do_not_disturb_on_outlined : _levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${formatLogTime(entry.time)} · ${presentation.level.name}${presentation.muted ? '（已忽略）' : ''} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 6),
+        child: Row(children: [
+          Expanded(child: DropdownButtonFormField<LogLevel?>(initialValue: level, decoration: const InputDecoration(labelText: '级别'), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) { setState(() => level = value); _applyFilter(); })),
+          const SizedBox(width: 8),
+          Expanded(child: DropdownButtonFormField<String?>(key: ValueKey('module-${module ?? 'all'}-${_moduleOptions().length}'), initialValue: _moduleOptions().contains(module) ? module : null, decoration: const InputDecoration(labelText: '模块'), items: [const DropdownMenuItem<String?>(value: null, child: Text('全部模块')), for (final name in _moduleOptions()) DropdownMenuItem<String?>(value: name, child: Text(name))], onChanged: (value) { setState(() => module = value); _applyFilter(); })),
+          IconButton(tooltip: '清空日志', onPressed: widget.logs.isEmpty ? null : _confirmClear, icon: const Icon(Icons.delete_outline, size: 20)),
+          IconButton(tooltip: '复制诊断信息', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.ios_share, size: 20)),
+        ]),
+      ),
+      Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: TextField(controller: search, onChanged: (_) => _applyFilter(), decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.search, size: 18), hintText: '搜索日志内容或模块'))),
+      Expanded(
+        child: filtering
+            ? const Center(child: CircularProgressIndicator())
+            : filtered.isEmpty
+                ? Center(child: Text('暂无匹配的 Runtime 日志', style: TextStyle(color: tokens.mutedText)))
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final entry = filtered[index];
+                      final presentation = presentLog(entry);
+                      final color = presentation.muted ? tokens.mutedText : _levelColor(context, presentation.level);
+                      final meta = '${formatLogTime(entry.time)} · ${presentation.level.name}${presentation.muted ? '（已忽略）' : ''} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}';
+                      return Container(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardTheme.color,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: tokens.outline),
+                        ),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Icon(presentation.muted ? Icons.remove_circle_outline : _levelIcon(presentation.level), size: 13, color: color),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(presentation.message, style: TextStyle(fontSize: 14.5, height: 1.35, fontWeight: FontWeight.w600, color: color)),
+                            const SizedBox(height: 4),
+                            Text(meta, style: TextStyle(fontSize: 11.5, color: tokens.mutedText)),
+                            if (presentation.detail != null) Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: tokens.mutedText, fontFamily: 'monospace')),
+                            ),
+                          ])),
+                        ]),
+                      );
+                    },
+                  ),
+      ),
     ]);
   }
 }
@@ -704,56 +977,72 @@ class _ConfigPageState extends State<_ConfigPage> {
     finally { if (mounted) setState(() => loadingModels = false); }
   }
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-    children: [
-      const Text('AI 与 QQ 配置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-      const SizedBox(height: 6),
-      Text('先填写接口与模型，再保存凭据；每个区块之间留有明确间距。', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 20),
+  Widget build(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    return _pageBody(context, [
       if (history.isNotEmpty) ...[
-        _sectionTitle('快速选择', '选择历史配置会填入接口、模型和地址，不会覆盖密钥。'),
-        DropdownButtonFormField<int>(value: selectedHistory, decoration: const InputDecoration(labelText: '历史 AI 配置', border: OutlineInputBorder()), items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))], onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); }),
-        const SizedBox(height: 20),
+        AppCard(
+          title: '历史配置',
+          trailing: IconButton(tooltip: '清除历史配置', onPressed: _clearHistory, icon: const Icon(Icons.delete_outline, size: 18)),
+          child: DropdownButtonFormField<int>(
+            key: ValueKey('history-$selectedHistory-${history.length}'),
+            initialValue: selectedHistory,
+            items: [const DropdownMenuItem<int>(value: null, child: Text('不使用历史配置')), ...history.asMap().entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value.label, overflow: TextOverflow.ellipsis)))],
+            onChanged: (value) { if (value == null) return; final item = history[value]; setState(() { selectedHistory = value; protocol.text = item.protocol; model.text = item.model; baseUrl.text = item.baseUrl; }); },
+          ),
+        ),
+        const SizedBox(height: 12),
       ],
-      _sectionTitle('AI 接口', '按填写顺序配置接口类型、地址、API Key、模型和思考程度。'),
-      const SizedBox(height: 10),
-      DropdownButtonFormField<String>(value: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型', border: OutlineInputBorder()), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
-      const SizedBox(height: 14),
-      _field(baseUrl, 'Base URL', '先填写接口地址，模型列表会从该地址的 /models 拉取', onChanged: (_) => setState(() { requestTest = null; })),
-      _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() { requestTest = null; })),
-      FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check), label: const Text('测试接口')),
-      if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))), if (!endpointTest!.ok) TextButton.icon(onPressed: _copyEndpointDiagnostic, icon: const Icon(Icons.copy, size: 16), label: const Text('复制诊断'))])),
-      const SizedBox(height: 14),
-      if (modelOptions.isNotEmpty) ...[
-        DropdownButtonFormField<String>(value: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '已拉取的模型', border: OutlineInputBorder()), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
-        const SizedBox(height: 14),
-      ],
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: _field(model, '模型名称', '可手动输入，也可从上面的 Base URL 拉取', onChanged: (_) => setState(() { requestTest = null; }))), const SizedBox(width: 12), Padding(padding: const EdgeInsets.only(top: 4), child: FilledButton.tonalIcon(onPressed: loadingModels || baseUrl.text.trim().isEmpty ? null : _fetchModels, icon: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh), label: const Text('拉取模型')))]),
-      const SizedBox(height: 4),
-      DropdownButtonFormField<String>(value: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度', helperText: '仅对支持该参数的模型生效；不支持时由接口忽略', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
-      const SizedBox(height: 8),
-      FilledButton.tonalIcon(onPressed: testingRequest || model.text.trim().isEmpty ? null : _testRequest, icon: testingRequest ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline), label: const Text('测试请求（发送一条 ping）')),
-      if (requestTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${requestTest!.ok ? '✓' : '✕'} ${requestTest!.stage}：${requestTest!.message}${requestTest!.statusCode == null ? '' : '（HTTP ${requestTest!.statusCode}）'}${requestTest!.elapsedMs == null ? '' : ' · ${requestTest!.elapsedMs} ms'}', style: TextStyle(color: requestTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-      const SizedBox(height: 14),
-      Text(_connectionReady ? '✓ AI 接口认证和测试请求均通过。' : '可以先保存配置，之后再测试；测试失败不会覆盖已保存的配置。', style: TextStyle(color: _connectionReady ? AppThemeTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 6),
-      Row(children: [Expanded(child: Text(_hasUnsavedChanges ? '当前页面有未保存修改' : '当前内容与已保存配置一致', style: TextStyle(color: _hasUnsavedChanges ? AppThemeTokens.of(context).warning : Theme.of(context).colorScheme.onSurfaceVariant))), if (_hasUnsavedChanges) TextButton.icon(onPressed: loading ? null : _restoreSavedConfig, icon: const Icon(Icons.undo), label: const Text('恢复已保存'))]),
-      const SizedBox(height: 8),
-      const SizedBox(height: 24),
-      _sectionTitle('QQ 官方机器人', 'AppID 与 AppSecret 用于连接 QQ 官方机器人服务。'),
-      const SizedBox(height: 10),
-      _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置', onChanged: (_) => setState(() {})),
-      _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() {})),
-      FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
-      if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['ok'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['ok'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-      SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: !loading && !saving && !testingEndpoint && !testingRequest && !testingQq ? _save : null, icon: const Icon(Icons.save), label: Text(saving ? '正在保存…' : '保存配置'))),
-      if (!_connectionReady && _needsLlmValidation) Padding(padding: const EdgeInsets.only(top: 8), child: Text('提示：未通过「测试接口 + 测试请求」也可以直接保存；测试失败不会覆盖已保存的配置。', style: TextStyle(fontSize: 12, color: AppThemeTokens.of(context).warning))),
-      if (history.isNotEmpty) Center(child: TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置'))),
-    ],
-  );
-
-  Widget _sectionTitle(String title, String description) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(description, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant))]);
+      AppCard(
+        title: 'AI 接口',
+        child: Column(children: [
+          DropdownButtonFormField<String>(key: ValueKey('protocol-${protocol.text}'), initialValue: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型'), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
+          const SizedBox(height: 12),
+          _field(baseUrl, 'Base URL', 'https://api.example.com/v1', onChanged: (_) => setState(() { requestTest = null; })),
+          _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() { requestTest = null; })),
+          SizedBox(width: double.infinity, child: FilledButton.tonalIcon(onPressed: testingEndpoint || baseUrl.text.trim().isEmpty ? null : _testEndpoint, icon: testingEndpoint ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.network_check, size: 18), label: const Text('测试接口'))),
+          if (endpointTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text('${endpointTest!.ok ? '✓' : '✕'} ${endpointTest!.stage}：${endpointTest!.message}${endpointTest!.statusCode == null ? '' : '（HTTP ${endpointTest!.statusCode}）'}${endpointTest!.elapsedMs == null ? '' : ' · ${endpointTest!.elapsedMs} ms'}', style: TextStyle(fontSize: 12.5, color: endpointTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))), if (!endpointTest!.ok) TextButton.icon(onPressed: _copyEndpointDiagnostic, icon: const Icon(Icons.copy, size: 14), label: const Text('复制诊断'))])),
+          const SizedBox(height: 16),
+          Divider(height: 1, color: tokens.outline),
+          const SizedBox(height: 16),
+          if (modelOptions.isNotEmpty) ...[
+            DropdownButtonFormField<String>(key: ValueKey('models-${modelOptions.length}-${model.text}'), initialValue: modelOptions.contains(model.text) ? model.text : null, decoration: const InputDecoration(labelText: '已拉取的模型'), items: modelOptions.map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(), onChanged: (value) { if (value != null) setState(() => model.text = value); }),
+            const SizedBox(height: 12),
+          ],
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: _field(model, '模型名称', 'deepseek-chat', onChanged: (_) => setState(() { requestTest = null; }))),
+            const SizedBox(width: 10),
+            Padding(padding: const EdgeInsets.only(top: 4), child: OutlinedButton(onPressed: loadingModels || baseUrl.text.trim().isEmpty ? null : _fetchModels, child: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('拉取模型'))),
+          ]),
+          DropdownButtonFormField<String>(key: ValueKey('thinking-$thinkingLevel'), initialValue: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度'), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
+          const SizedBox(height: 12),
+          SizedBox(width: double.infinity, child: FilledButton.tonalIcon(onPressed: testingRequest || model.text.trim().isEmpty ? null : _testRequest, icon: testingRequest ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline, size: 18), label: const Text('测试请求（发送一条 ping）'))),
+          if (requestTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${requestTest!.ok ? '✓' : '✕'} ${requestTest!.stage}：${requestTest!.message}${requestTest!.statusCode == null ? '' : '（HTTP ${requestTest!.statusCode}）'}${requestTest!.elapsedMs == null ? '' : ' · ${requestTest!.elapsedMs} ms'}', style: TextStyle(fontSize: 12.5, color: requestTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        child: Row(children: [
+          Icon(_connectionReady ? Icons.verified_outlined : Icons.info_outline, size: 16, color: _connectionReady ? AppThemeTokens.of(context).success : tokens.mutedText),
+          const SizedBox(width: 8),
+          Expanded(child: Text(_connectionReady ? '接口认证和测试请求均已通过' : '尚未通过完整测试，可直接保存', style: TextStyle(fontSize: 12.5, color: tokens.mutedText))),
+          if (_hasUnsavedChanges) TextButton(onPressed: loading ? null : _restoreSavedConfig, child: const Text('恢复已保存')),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: 'QQ 官方机器人',
+        child: Column(children: [
+          _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置', onChanged: (_) => setState(() {})),
+          _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() {})),
+          SizedBox(width: double.infinity, child: FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link, size: 18), label: const Text('测试 QQ 连接'))),
+          if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['ok'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(fontSize: 12.5, color: qqTest!['ok'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+        ]),
+      ),
+      const SizedBox(height: 16),
+      SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: !loading && !saving && !testingEndpoint && !testingRequest && !testingQq ? _save : null, icon: const Icon(Icons.save_outlined, size: 18), label: Text(saving ? '正在保存…' : '保存配置'))),
+    ]);
+  }
 
   String _credentialValue(TextEditingController controller) => controller.text == _savedMask ? '' : controller.text;
 
@@ -764,7 +1053,6 @@ class _ConfigPageState extends State<_ConfigPage> {
     return '${protocol.text.trim()}|${baseUrl.text.trim().replaceAll(RegExp(r'/+$'), '')}|${key.isEmpty && llmConfigured ? '<saved>' : key}';
   }
 
-  bool get _needsLlmValidation => baseUrl.text.trim().isNotEmpty || llmConfigured || _credentialValue(apiKey).isNotEmpty;
   bool get _connectionReady => endpointValidated && testedConnection == _connectionFingerprint && requestTest?.ok == true;
   bool get _hasUnsavedChanges => hasUnsavedConfigChanges(
         current: LlmConfigDraft(protocol: protocol.text, model: model.text, baseUrl: baseUrl.text, thinkingLevel: thinkingLevel, appId: appId.text, apiKey: apiKey.text, secret: secret.text),
@@ -873,64 +1161,148 @@ class _SettingsPageState extends State<_SettingsPage> {
   void _pauseDownload() { downloadController?.pause(); if (mounted) setState(() { downloading = false; downloadPaused = true; }); }
   void _cancelDownload() { downloadController?.cancel(); if (mounted) setState(() { downloading = false; downloadPaused = false; }); }
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
-    const Text('设置', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 12),
-    DropdownButtonFormField<ThemeMode>(value: themeMode, decoration: const InputDecoration(labelText: '主题', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: ThemeMode.dark, child: Text('深色')), DropdownMenuItem(value: ThemeMode.light, child: Text('浅色')), DropdownMenuItem(value: ThemeMode.system, child: Text('跟随系统'))], onChanged: (value) { if (value != null) { setState(() => themeMode = value); _applyTheme(); } }),
-    const SizedBox(height: 8),
-    DropdownButtonFormField<Color>(value: seedColor, decoration: const InputDecoration(labelText: '主色', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: Color(0xff8290ff), child: Text('靛蓝')), DropdownMenuItem(value: Color(0xff4dd0e1), child: Text('青色')), DropdownMenuItem(value: Color(0xffff8a65), child: Text('珊瑚橙')), DropdownMenuItem(value: Color(0xffce93d8), child: Text('紫色'))], onChanged: (value) { if (value != null) { setState(() => seedColor = value); _applyTheme(); } }),
-    const SizedBox(height: 8),
-    DropdownButtonFormField<double>(value: cardRadius, decoration: const InputDecoration(labelText: '卡片圆角', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 8, child: Text('小')), DropdownMenuItem(value: 16, child: Text('中')), DropdownMenuItem(value: 24, child: Text('大'))], onChanged: (value) { if (value != null) { setState(() => cardRadius = value); _applyTheme(); } }),
-    const SizedBox(height: 8),
-    DropdownButtonFormField<double>(value: cardOpacity, decoration: const InputDecoration(labelText: '卡片透明度', border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 0.7, child: Text('高透明')), DropdownMenuItem(value: 0.85, child: Text('半透明')), DropdownMenuItem(value: 1.0, child: Text('不透明'))], onChanged: (value) { if (value != null) { setState(() => cardOpacity = value); _applyTheme(); } }),
-    SwitchListTile(title: const Text('柔和背景'), subtitle: const Text('使用轻微着色背景'), value: tintedBackground, onChanged: (value) { setState(() => tintedBackground = value); _applyTheme(); }),
-    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _resetTheme, icon: const Icon(Icons.restart_alt), label: const Text('恢复默认主题'))), if (recentThemes.isNotEmpty) IconButton(tooltip: '恢复最近主题', onPressed: () { final recent = recentThemes.first; setState(() { themeMode = recent.mode; seedColor = recent.seedColor; cardRadius = recent.cardRadius; cardOpacity = recent.cardOpacity; tintedBackground = recent.tintedBackground; }); _applyTheme(); }, icon: const Icon(Icons.history))]),
-    const SizedBox(height: 16),
-    Card(child: ListTile(title: const Text('应用版本'), subtitle: Text('${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'))),
-    Card(child: ListTile(title: const Text('运行 ABI'), subtitle: Text(info['abi'] ?? '读取中'))),
-    const SizedBox(height: 12),
-    const Text('后台运行', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-    Row(children: [
-      Expanded(child: OutlinedButton.icon(onPressed: () async { try { await widget.bridge.openBatteryOptimizationSettings(); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开电池设置：$error'))); } }, icon: const Icon(Icons.battery_saver), label: const Text('电池优化设置'))),
-      const SizedBox(width: 8),
-      Expanded(child: OutlinedButton.icon(onPressed: () async { try { await widget.bridge.openNotificationSettings(); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开通知设置：$error'))); } }, icon: const Icon(Icons.notifications_outlined), label: const Text('通知设置'))),
-    ]),
-    const Text('系统可能限制后台活动；请按需允许本应用后台运行和通知。', style: TextStyle(color: Colors.white60)),
-    const SizedBox(height: 12),
-    const SizedBox(height: 8),
-    FilledButton.tonalIcon(onPressed: checkingUpdate ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.update), label: const Text('检查在线更新')),
-    if (releaseCheck != null)
-      Card(child: ListTile(
-        leading: Icon(releaseCheck!.failed ? Icons.cloud_off : releaseCheck!.hasUpdate ? Icons.system_update : Icons.verified),
-        title: Text(releaseCheck!.failed ? '检查更新失败' : releaseCheck!.hasUpdate ? '发现新版本 ${releaseCheck!.latest}' : '已是最新版本'),
-        subtitle: Text(_checkSummary(releaseCheck!)),
-        isThreeLine: true,
-      )),
-    if (manifest != null) ...[
-      Card(child: ListTile(title: Text('新版本 ${manifest!.versionName} · ${manifest!.abi}'), subtitle: Text('${manifest!.releaseNotes}\n大小：${manifest!.sizeLabel}\nSHA-256：${manifest!.sha256}'), isThreeLine: true)),
-      if (downloading) ...[LinearProgressIndicator(value: downloadProgress), Row(children: [Expanded(child: Text('下载中 ${(downloadProgress * 100).toStringAsFixed(0)}%')), IconButton(tooltip: '暂停', onPressed: _pauseDownload, icon: const Icon(Icons.pause)), IconButton(tooltip: '取消', onPressed: _cancelDownload, icon: const Icon(Icons.close))])],
-      if (!downloading) FilledButton.icon(onPressed: manifest!.apkUrl.isEmpty ? null : _downloadAndInstall, icon: Icon(downloadPaused ? Icons.play_arrow : Icons.download), label: Text(downloadPaused ? '继续下载' : '下载并安装更新')),
-    ],
-    const SizedBox(height: 8),
-    FilledButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile), label: const Text('从本地 APK 更新')),
-    const SizedBox(height: 8),
-    const Text('更新会交给 Android 系统安装器处理，应用不会绕过系统确认。', style: TextStyle(color: Colors.white60)),
-    const SizedBox(height: 16),
-    const Text('配置备份', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file), label: const Text('导出脱敏备份'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open), label: const Text('导入备份')))]),
-    const Text('备份不包含 API Key、AppSecret 和会话记录；会包含你主动保存的默认角色卡。', style: TextStyle(color: Colors.white60)),
-    const SizedBox(height: 8),
-    if (backups.isEmpty) const Text('暂无自动备份', style: TextStyle(color: Colors.white60)),
-    ...backups.map((backup) => Card(child: ListTile(leading: const Icon(Icons.backup), title: Text('${backup['name'] ?? '自动备份'}'), subtitle: Text('${((backup['size'] as num?)?.toInt() ?? 0) ~/ 1024} KB'), trailing: TextButton(onPressed: () => _restoreBackup(backup), child: const Text('恢复'))))),
-    const SizedBox(height: 16),
-    const Text('数据清理', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-    OutlinedButton.icon(onPressed: () => _clearData('logs', '清除 Runtime 日志？', '只删除输出日志，不影响配置和会话。'), icon: const Icon(Icons.article_outlined), label: const Text('清除日志')),
-    OutlinedButton.icon(onPressed: () => _clearData('sessions', '清除会话？', '会删除 Runtime 会话索引和上下文，不能恢复。'), icon: const Icon(Icons.history), label: const Text('清除会话')),
-    OutlinedButton.icon(onPressed: () => _clearData('all', '清除全部配置？', '将删除 AI/QQ 凭据、主题、默认角色卡和历史配置，操作不可恢复。'), icon: const Icon(Icons.delete_forever), label: const Text('清除全部配置')),
-  ]);
+  Widget build(BuildContext context) {
+    return _pageBody(context, [
+      AppCard(
+        title: '外观',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('主色', style: TextStyle(fontSize: 12.5)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 12, children: [
+            for (final color in _seedColors) _SeedDot(color: color, selected: color == seedColor, onTap: () { setState(() => seedColor = color); _applyTheme(); }),
+          ]),
+          const SizedBox(height: 16),
+          const Text('卡片圆角', style: TextStyle(fontSize: 12.5)),
+          const SizedBox(height: 8),
+          SegmentedButton<double>(showSelectedIcon: false, segments: const [ButtonSegment(value: 10.0, label: Text('小')), ButtonSegment(value: 16.0, label: Text('中')), ButtonSegment(value: 22.0, label: Text('大'))], selected: {cardRadius}, onSelectionChanged: (value) { setState(() => cardRadius = value.first); _applyTheme(); }),
+          const SizedBox(height: 16),
+          const Text('卡片透明度', style: TextStyle(fontSize: 12.5)),
+          const SizedBox(height: 8),
+          SegmentedButton<double>(showSelectedIcon: false, segments: const [ButtonSegment(value: 0.7, label: Text('高透明')), ButtonSegment(value: 0.85, label: Text('半透明')), ButtonSegment(value: 1.0, label: Text('不透明'))], selected: {cardOpacity}, onSelectionChanged: (value) { setState(() => cardOpacity = value.first); _applyTheme(); }),
+          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('柔和背景', style: TextStyle(fontSize: 13.5)), value: tintedBackground, onChanged: (value) { setState(() => tintedBackground = value); _applyTheme(); }),
+          const SizedBox(height: 4),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: _resetTheme, icon: const Icon(Icons.restart_alt, size: 18), label: const Text('恢复默认外观'))),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(child: Column(children: [
+        _kvRow(context, '应用版本', '${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'),
+        Divider(height: 18, color: AppSurfaceTokens.of(context).outline),
+        _kvRow(context, '运行 ABI', info['abi'] ?? '读取中'),
+      ])),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '后台运行',
+        child: Row(children: [
+          Expanded(child: OutlinedButton.icon(onPressed: () async { try { await widget.bridge.openBatteryOptimizationSettings(); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开电池设置：$error'))); } }, icon: const Icon(Icons.battery_saver, size: 18), label: const Text('电池优化'))),
+          const SizedBox(width: 8),
+          Expanded(child: OutlinedButton.icon(onPressed: () async { try { await widget.bridge.openNotificationSettings(); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开通知设置：$error'))); } }, icon: const Icon(Icons.notifications_outlined, size: 18), label: const Text('通知设置'))),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '应用更新',
+        trailing: IconButton(tooltip: '检查在线更新', onPressed: checkingUpdate ? null : _checkUpdate, icon: checkingUpdate ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh, size: 18)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (releaseCheck == null) Text('还没有检查过更新', style: TextStyle(fontSize: 12.5, color: AppSurfaceTokens.of(context).mutedText))
+          else Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(releaseCheck!.failed ? Icons.cloud_off : releaseCheck!.hasUpdate ? Icons.system_update : Icons.verified_outlined, size: 18, color: releaseCheck!.failed ? AppThemeTokens.of(context).warning : releaseCheck!.hasUpdate ? AppThemeTokens.of(context).warning : AppThemeTokens.of(context).success),
+            const SizedBox(width: 8),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(releaseCheck!.failed ? '检查更新失败' : releaseCheck!.hasUpdate ? '发现新版本 ${releaseCheck!.latest}' : '已是最新版本', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(_checkSummary(releaseCheck!), style: TextStyle(fontSize: 12, color: AppSurfaceTokens.of(context).mutedText)),
+            ])),
+          ]),
+          if (manifest != null) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: AppSurfaceTokens.of(context).outline),
+            const SizedBox(height: 12),
+            Text('${manifest!.versionName} · ${manifest!.abi} · ${manifest!.sizeLabel}', style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 6),
+            Text(manifest!.releaseNotes, style: TextStyle(fontSize: 12, color: AppSurfaceTokens.of(context).mutedText)),
+            const SizedBox(height: 10),
+            if (downloading) ...[
+              LinearProgressIndicator(value: downloadProgress),
+              Row(children: [
+                Expanded(child: Text('下载中 ${(downloadProgress * 100).toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12.5))),
+                IconButton(tooltip: '暂停', onPressed: _pauseDownload, icon: const Icon(Icons.pause)),
+                IconButton(tooltip: '取消', onPressed: _cancelDownload, icon: const Icon(Icons.close)),
+              ]),
+            ] else
+              SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: manifest!.apkUrl.isEmpty ? null : _downloadAndInstall, icon: Icon(downloadPaused ? Icons.play_arrow : Icons.download, size: 18), label: Text(downloadPaused ? '继续下载' : '下载并安装更新'))),
+          ],
+          const SizedBox(height: 10),
+          SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile, size: 18), label: const Text('从本地 APK 更新'))),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '配置备份',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file, size: 18), label: const Text('导出备份'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open, size: 18), label: const Text('导入备份'))),
+          ]),
+          if (backups.isEmpty) Padding(padding: const EdgeInsets.only(top: 10), child: Text('暂无自动备份', style: TextStyle(fontSize: 12.5, color: AppSurfaceTokens.of(context).mutedText)))
+          else ...[
+            const SizedBox(height: 6),
+            for (final backup in backups)
+              ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.backup_outlined, size: 18), title: Text('${backup['name'] ?? '自动备份'}', style: const TextStyle(fontSize: 13)), subtitle: Text('${((backup['size'] as num?)?.toInt() ?? 0) ~/ 1024} KB', style: const TextStyle(fontSize: 11.5)), trailing: TextButton(onPressed: () => _restoreBackup(backup), child: const Text('恢复'))),
+          ],
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '数据清理',
+        child: Column(children: [
+          _dangerRow(context, '清除日志', () => _clearData('logs', '清除 Runtime 日志？', '只删除输出日志，不影响配置和会话。')),
+          _dangerRow(context, '清除会话', () => _clearData('sessions', '清除会话？', '会删除 Runtime 会话索引和上下文，不能恢复。')),
+          _dangerRow(context, '清除全部配置', () => _clearData('all', '清除全部配置？', '将删除 AI/QQ 凭据、外观设置、默认角色卡和历史配置，操作不可恢复。')),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      Material(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(cardRadius),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(cardRadius),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _TutorialPage())),
+          child: Container(
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(cardRadius), border: Border.all(color: AppSurfaceTokens.of(context).outline)),
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(children: [
+              const Icon(Icons.menu_book_outlined, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('说明与教程', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+              Icon(Icons.chevron_right, color: AppSurfaceTokens.of(context).mutedText),
+            ]),
+          ),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _kvRow(BuildContext context, String label, String value) => Row(children: [
+        SizedBox(width: 88, child: Text(label, style: TextStyle(fontSize: 13, color: AppSurfaceTokens.of(context).mutedText))),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 13.5))),
+      ]);
+
+  Widget _dangerRow(BuildContext context, String label, VoidCallback onTap) => InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 2),
+          child: Row(children: [
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+            Icon(Icons.chevron_right, size: 18, color: AppSurfaceTokens.of(context).mutedText),
+          ]),
+        ),
+      );
+
+  static const List<Color> _seedColors = [Color(0xff0e7490), Color(0xff4f7cff), Color(0xffff8a65), Color(0xffb07cf0)];
+
 }
 
 class _RolePage extends StatefulWidget {
@@ -956,6 +1328,15 @@ class _RolePageState extends State<_RolePage> {
   @override
   void dispose() { roleId.dispose(); roleName.dispose(); rolePrompt.dispose(); importJson.dispose(); super.dispose(); }
   Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; defaultName = role['name'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); if (mounted && role['missing'] == 'true') ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('原默认角色已不存在，已回退为空角色；请重新设置默认角色。'))); }
+  Widget _field(TextEditingController c, String label, String hint) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          controller: c,
+          enabled: !loading,
+          decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder()),
+        ),
+      );
+
   void _newRole() { setState(() { editingExisting = false; editingId = ''; roleId.clear(); roleName.clear(); rolePrompt.clear(); }); }
   void _edit(RoleCard role) { setState(() { editingExisting = true; editingId = role.id; roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); }
   Future<void> _save() async {
@@ -992,34 +1373,143 @@ class _RolePageState extends State<_RolePage> {
   Future<void> _export() async { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); final result = await widget.bridge.exportRoleCard(jsonEncode(role.toMap())); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '角色卡已导出' : '导出操作：${result['status']}'))); }
   Future<void> _importFile() async { try { final text = await widget.bridge.importRoleCard(); if (text == null) return; final decoded = await decodeJsonInBackground(text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡文件已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
   @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(16), children: [
-    const Text('角色管理', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-    const Text('角色卡决定模型的说话方式和行为边界。先新建或选择角色，编辑完成后必须点击“保存角色卡”；切换角色请在 QQ 对话中使用 /preset。', style: TextStyle(color: Colors.white60)),
-    const SizedBox(height: 8),
-     const Card(child: Padding(padding: EdgeInsets.all(12), child: Text('填写建议：新建角色通常只需要填写名称和人格提示词，保存时会自动生成唯一的 custom.xxx ID；显示名称用于列表展示；提示词建议写清身份、语气、行为规则、禁止事项和回复格式。提示词为空时不会保存。', style: TextStyle(color: Colors.white70)))),
-    const SizedBox(height: 16),
-    Card(child: ListTile(leading: Icon(defaultId.isEmpty ? Icons.star_border : Icons.star, color: defaultId.isEmpty ? Colors.white54 : Colors.amber), title: Text(defaultId.isEmpty ? '尚未设置默认角色' : '默认角色：${defaultName.isEmpty ? '已选择角色' : defaultName}'), subtitle: const Text('新会话和未指定角色的消息会使用这里的角色；选择角色后点击“设为默认角色”。'))),
-    const SizedBox(height: 8),
-    Row(children: [Expanded(child: OutlinedButton.icon(onPressed: _newRole, icon: const Icon(Icons.add), label: const Text('新建角色'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _export, icon: const Icon(Icons.upload_file), label: const Text('导出 JSON')))]),
-    const SizedBox(height: 12),
-    if (roles.isEmpty) const Card(child: ListTile(leading: Icon(Icons.info_outline), title: Text('暂无自定义角色'), subtitle: Text('点击“新建角色”创建 custom.xxx 角色卡。'))),
-     ...roles.map((role) => Card(child: ListTile(title: Text(role.displayName), subtitle: Text('${role.id == defaultId ? '默认角色 · ' : ''}${role.builtin ? '内置角色' : '自定义角色'}'), trailing: Row(mainAxisSize: MainAxisSize.min, children: [if (role.id != defaultId) TextButton(onPressed: loading ? null : () => _setRoleDefault(role), child: const Text('设为默认')), IconButton(tooltip: '编辑角色', onPressed: () => _edit(role), icon: const Icon(Icons.edit))])))),
-    const SizedBox(height: 16),
-    const Text('角色编辑', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-     ExpansionTile(title: const Text('高级选项：角色 ID'), subtitle: Text(roleId.text.isEmpty ? '保存时自动生成' : roleId.text), children: [TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', helperText: '内部识别用；新建角色留空即可自动生成 custom.xxx', hintText: 'custom.my-role', border: OutlineInputBorder()))]),
-    const SizedBox(height: 8),
-    TextField(controller: roleName, enabled: !loading, decoration: const InputDecoration(labelText: '显示名称', helperText: '用户在角色列表和提示中看到的名称', hintText: '例如：七草日花', border: OutlineInputBorder())),
-    const SizedBox(height: 12),
-    TextField(controller: rolePrompt, enabled: !loading, minLines: 12, maxLines: 24, decoration: const InputDecoration(labelText: '人格提示词', helperText: '可滚动编辑；建议包含身份、性格、语气、行为规则、边界和示例回复', hintText: '你是谁？如何说话？哪些内容必须拒绝？', alignLabelWithHint: true, border: OutlineInputBorder())),
-    const SizedBox(height: 12),
-    Row(children: [Expanded(child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save), label: const Text('保存角色卡'))), const SizedBox(width: 8), OutlinedButton.icon(onPressed: loading ? null : _setDefault, icon: Icon(defaultId == roleId.text ? Icons.star : Icons.star_border), label: const Text('设为默认角色')), IconButton(tooltip: '删除角色', onPressed: loading ? null : _delete, icon: const Icon(Icons.delete_outline))]),
-    const SizedBox(height: 16),
-    const Text('导入角色卡 JSON', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 8),
-    TextField(controller: importJson, minLines: 4, maxLines: 8, decoration: const InputDecoration(hintText: '{"id":"custom.example","displayName":"示例","prompt":"你是……"}', border: OutlineInputBorder())),
-    const SizedBox(height: 8),
-    Row(children: [Expanded(child: FilledButton.icon(onPressed: _importFile, icon: const Icon(Icons.file_open), label: const Text('选择 JSON 文件'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: _import, icon: const Icon(Icons.paste), label: const Text('粘贴 JSON')))]),
-  ]);
+  Widget build(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    return _pageBody(context, [
+      Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [tokens.heroStart, tokens.heroEnd], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+        child: Row(children: [
+          const Icon(Icons.star_rounded, color: Colors.white, size: 22),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('默认角色', style: TextStyle(fontSize: 12.5, color: Colors.white.withValues(alpha: 0.85))),
+            const SizedBox(height: 2),
+            Text(defaultId.isEmpty ? '尚未设置' : (defaultName.isEmpty ? defaultId : defaultName), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+            if (defaultId.isNotEmpty) Text(defaultId, style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: Colors.white.withValues(alpha: 0.8))),
+          ])),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '角色列表',
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(tooltip: '新建角色', onPressed: _newRole, icon: const Icon(Icons.add, size: 20)),
+          IconButton(tooltip: '导出当前角色 JSON', onPressed: _export, icon: const Icon(Icons.ios_share, size: 18)),
+        ]),
+        child: roles.isEmpty
+            ? Text('还没有自定义角色，点右上角新建。', style: TextStyle(fontSize: 13, color: tokens.mutedText))
+            : Column(children: [
+                for (final role in roles)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => _edit(role),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      child: Row(children: [
+                        Icon(role.id == defaultId ? Icons.star_rounded : Icons.person_outline, size: 18, color: role.id == defaultId ? const Color(0xFFFFC46B) : tokens.mutedText),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(role.displayName, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+                          Text('${role.id} · ${role.builtin ? '内置角色' : '自定义角色'}', style: TextStyle(fontSize: 11.5, color: tokens.mutedText)),
+                        ])),
+                        if (role.id != defaultId) TextButton(onPressed: loading ? null : () => _setRoleDefault(role), child: const Text('设为默认')),
+                        const Icon(Icons.chevron_right, size: 18),
+                      ]),
+                    ),
+                  ),
+              ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: editingExisting ? '编辑角色' : '新建角色',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _field(roleName, '显示名称', '例如：七草日花'),
+          TextField(controller: rolePrompt, enabled: !loading, minLines: 10, maxLines: 18, decoration: const InputDecoration(labelText: '人格提示词', hintText: '身份、性格、语气、行为规则和边界', alignLabelWithHint: true)),
+          const SizedBox(height: 10),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              title: Text('高级选项：角色 ID', style: TextStyle(fontSize: 13, color: tokens.mutedText)),
+              subtitle: Text(roleId.text.isEmpty ? '保存时自动生成' : roleId.text, style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: tokens.mutedText)),
+              children: [TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', hintText: 'custom.my-role'))],
+            ),
+          ),
+          Row(children: [
+            Expanded(child: FilledButton.icon(onPressed: loading ? null : _save, icon: const Icon(Icons.save_outlined, size: 18), label: const Text('保存角色卡'))),
+            const SizedBox(width: 8),
+            OutlinedButton(onPressed: loading ? null : _setDefault, child: const Text('设为默认')),
+            IconButton(tooltip: '删除角色', onPressed: loading ? null : _delete, icon: const Icon(Icons.delete_outline, size: 20)),
+          ]),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '导入角色卡',
+        child: Column(children: [
+          TextField(controller: importJson, minLines: 3, maxLines: 6, decoration: const InputDecoration(hintText: '{"id":"custom.example","displayName":"示例","prompt":"你是……"}')),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: FilledButton.tonalIcon(onPressed: _importFile, icon: const Icon(Icons.file_open, size: 18), label: const Text('选择 JSON 文件'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(onPressed: _import, icon: const Icon(Icons.paste, size: 18), label: const Text('粘贴 JSON'))),
+          ]),
+        ]),
+      ),
+    ]);
+  }
+}
+
+class _SeedDot extends StatelessWidget {
+  const _SeedDot({required this.color, required this.selected, required this.onTap});
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: selected ? Colors.white : Colors.transparent, width: 2),
+          ),
+          child: selected ? const Icon(Icons.check, size: 18, color: Colors.white) : null,
+        ),
+      );
+}
+
+/// 说明性文字集中到这里，页面本身只留操作。
+class _TutorialPage extends StatelessWidget {
+  const _TutorialPage();
+
+  static const List<(String, String)> _sections = [
+    ('首次配置顺序', '1. 填写 AI 接口类型、Base URL 和 API Key；\n2. 点「测试接口」确认地址可用，再「拉取模型」选择模型；\n3. 点「测试请求」发一条 ping，确认模型能回话；\n4. 填写 QQ 官方机器人的 AppID 与 AppSecret，点「测试 QQ 连接」；\n5. 保存配置，回到总览点「重启」。\n\n测试失败不会覆盖已经保存的凭据；任何时候都可以先保存再慢慢测。'),
+    ('公网 IP 白名单', 'QQ 开放平台按 IP 白名单放行。手机用流量或换 Wi-Fi 后地址会变化，需要回到总览复制新的 IPv4 地址，在开放平台更新白名单。'),
+    ('角色卡', '角色卡决定模型的说话方式和行为边界。新建角色通常只需要填名称和人格提示词，保存时会自动生成 custom.xxx 的 ID。提示词建议写清身份、语气、行为规则、禁止事项和回复格式；为空时不会保存。切换角色请在 QQ 里用 /preset。'),
+    ('后台运行', 'Android 会限制后台活动。若机器人经常掉线，请在系统设置里允许本应用后台运行、取消电池优化，并允许通知。'),
+    ('应用更新', '「检查在线更新」会直接读取 GitHub 上最新的 Release 并和当前版本比较：已是最新时只显示版本号，有新版本才出现下载按钮。下载完成后由 Android 系统安装器接管，需要允许本应用安装未知来源应用。debug 包和 release 包签名不同，覆盖安装前要卸载旧包。'),
+    ('备份与清理', '导出的备份不包含 API Key、AppSecret 和会话记录，但会包含主动保存的默认角色卡。清除会话会丢上下文，清除全部配置会删除凭据和外观设置，都不能恢复。'),
+    ('日志', '运行时日志会同时写入文件，杀掉应用后重新打开仍能看到上一次启动和运行记录。日志页可以按级别和模块筛选、搜索关键词；「复制诊断信息」会带上版本号、ABI 和导出时间。'),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('说明与教程')),
+        body: _pageBody(context, [
+          for (final section in _sections) ...[
+            AppCard(title: section.$1, child: Text(section.$2, style: const TextStyle(fontSize: 13.5, height: 1.6))),
+            const SizedBox(height: 12),
+          ],
+        ]),
+      );
 }
