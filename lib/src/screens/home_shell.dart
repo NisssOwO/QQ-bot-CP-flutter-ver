@@ -9,6 +9,7 @@ import '../models/runtime_state.dart';
 import '../models/role_card.dart';
 import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
+import '../services/log_presenter.dart';
 import '../services/startup_stats.dart';
 import '../services/background_tasks.dart';
 import '../models/update_manifest.dart';
@@ -407,7 +408,7 @@ class _LogPageState extends State<_LogPage> {
         Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) { module = value; _applyFilter(); })),
         IconButton(tooltip: '复制脱敏日志', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
       ])),
-      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final color = _levelColor(context, entry.level); return ListTile(leading: Icon(_levelIcon(entry.level), color: color), title: Text(entry.message, style: TextStyle(color: color)), subtitle: Text('${entry.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}')); })),
+      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = _levelColor(context, presentation.level); return ListTile(leading: Icon(_levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${presentation.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
     ]);
   }
 }
