@@ -283,35 +283,7 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) { emptyMap() }
     }
 
-    private fun parseModelIds(body: String): List<String> {
-        val text = body.trim()
-        if (text.isEmpty()) return emptyList()
-        val values = mutableListOf<String>()
-        fun collect(array: org.json.JSONArray?) {
-            if (array == null) return
-            for (index in 0 until array.length()) {
-                val item = array.opt(index)
-                val id = when (item) {
-                    is org.json.JSONObject -> listOf("id", "name", "model").firstNotNullOfOrNull { key -> item.optString(key).trim().takeIf { it.isNotEmpty() } }
-                    is String -> item.trim().takeIf { it.isNotEmpty() }
-                    else -> null
-                }
-                if (id != null) values += id
-            }
-        }
-        try {
-            if (text.startsWith("[")) {
-                collect(org.json.JSONArray(text))
-            } else {
-                val json = org.json.JSONObject(text)
-                collect(json.optJSONArray("data"))
-                if (values.isEmpty()) collect(json.optJSONArray("models"))
-            }
-        } catch (_: Exception) {
-            return emptyList()
-        }
-        return values.distinct().sorted()
-    }
+    private fun parseModelIds(body: String): List<String> = ModelIdParser.parse(body)
 
     private fun modelErrorDetail(body: String): String {
         return try {

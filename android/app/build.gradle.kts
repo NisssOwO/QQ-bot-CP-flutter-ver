@@ -60,6 +60,13 @@ kotlin {
     }
 }
 
+dependencies {
+    // 本地 JVM 单元测试：解析网关模型列表、校验发布配置等纯逻辑。
+    testImplementation("junit:junit:4.13.2")
+    // android.jar 里的 org.json 只是桩实现，单测需要真实的解析器。
+    testImplementation("org.json:json:20240303")
+}
+
 flutter {
     source = "../.."
 }

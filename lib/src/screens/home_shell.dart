@@ -11,6 +11,7 @@ import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
 import '../services/log_presenter.dart';
 import '../services/startup_stats.dart';
+import '../services/config_draft.dart';
 import '../services/background_tasks.dart';
 import '../models/update_manifest.dart';
 import '../services/update_service.dart';
@@ -620,7 +621,10 @@ class _ConfigPageState extends State<_ConfigPage> {
 
   bool get _needsLlmValidation => baseUrl.text.trim().isNotEmpty || llmConfigured || _credentialValue(apiKey).isNotEmpty;
   bool get _connectionReady => endpointValidated && testedConnection == _connectionFingerprint && requestTest?.ok == true;
-  bool get _hasUnsavedChanges => protocol.text.trim() != savedProtocol || model.text.trim() != savedModel || baseUrl.text.trim() != savedBaseUrl || thinkingLevel != savedThinkingLevel || appId.text.trim() != savedAppId || (apiKey.text.isNotEmpty && apiKey.text != _savedMask) || (secret.text.isNotEmpty && secret.text != _savedMask);
+  bool get _hasUnsavedChanges => hasUnsavedConfigChanges(
+        current: LlmConfigDraft(protocol: protocol.text, model: model.text, baseUrl: baseUrl.text, thinkingLevel: thinkingLevel, appId: appId.text, apiKey: apiKey.text, secret: secret.text),
+        saved: LlmConfigDraft(protocol: savedProtocol, model: savedModel, baseUrl: savedBaseUrl, thinkingLevel: savedThinkingLevel, appId: savedAppId),
+      );
 
   Future<void> _clearHistory() async {
     final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('清除历史配置？'), content: const Text('只会删除接口类型、模型和 Base URL 历史，不会删除已保存的密钥。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('清除'))])) ?? false;
