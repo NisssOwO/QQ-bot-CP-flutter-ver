@@ -1,10 +1,10 @@
 {
-  "versionName": "0.1.2",
-  "versionCode": 3,
+  "versionName": "0.1.3",
+  "versionCode": 4,
   "abi": "arm64-v8a",
   "minSdk": 24,
-  "sizeBytes": 176422889,
-  "sha256": "7d9e690d0dc11641768e50c76831873915193baa671214f22856090522d0c1a3",
-  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.1.2/QQ-bot-CP-v0.1.2-arm64.apk",
-  "releaseNotes": "QQ-bot-CP Flutter 版 Android 16 arm64 Release；修复重装后角色卡不生效（运行目录缺少人格文件时自动补写），并保留重启、群聊角色卡、桌面插件关闭、启动耗时分组等改动。"
+  "sizeBytes": 176437713,
+  "sha256": "84ebfcb5f3a5651d1545db6004d7d036c41128c026c555d094b04ba9ab7dc1c4",
+  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.1.3/QQ-bot-CP-v0.1.3-arm64.apk",
+  "releaseNotes": "QQ-bot-CP Flutter 版 Android 16 arm64 Release；恢复公网 IP 卡片（含检测时间、变化时间与复制），日志行带时间戳并支持一键清空。"
 }
