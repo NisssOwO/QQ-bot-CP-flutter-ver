@@ -1,4 +1,7 @@
 const CODE_RULES = [
+  // A tool that dies without reporting an outcome aborts the whole turn; say that
+  // plainly instead of surfacing TOOL_OUTCOME_UNKNOWN to the person in the chat.
+  { test: /tooloutcomeunknown|tool.?outcome|tool.?call.*fail/i, code: 'AI_TOOL_UNAVAILABLE', message: '这轮要用联网工具，但它在手机上不可用，所以没有答完。可以再发一次，或换个不用联网的问题。' },
   { test: /401|unauthori[sz]ed|authentication|api.?key/i, code: 'AI_AUTH_FAILED', message: 'AI 接口认证失败，请检查 API Key 是否正确、已保存，并确认它属于当前接口。' },
   { test: /model.*(not found|不存在|invalid)|unknown model|模型.*(不存在|无效)/i, code: 'AI_MODEL_NOT_FOUND', message: '模型名称不可用，请从当前 Base URL 重新拉取模型列表。' },
   { test: /thinking(format|.?level)|reasoning|unsupported.*(parameter|option)|invalid.?config|invalid.?request|400\b/i, code: 'AI_REQUEST_INVALID', message: '当前模型或接口不支持这组请求参数，请重新测试接口或关闭不兼容的思考设置。' },
