@@ -160,7 +160,7 @@
 - [x] 重新执行 Flutter 测试、Dart 分析和 Runtime 离线回归（`flutter analyze --no-fatal-infos` 通过；仍有 11 条既有 info/deprecation 提示）。
 - [x] 检查 APK 不包含用户数据、凭据、会话和角色卡（Debug APK 审计通过，276,024,072 bytes）。
 - [x] 更新 README、Release 说明、文件大小和 SHA-256。
-- [x] 构建签名 APK（2026-11-01 11:03 重新签名构建，176421325 字节，SHA-256 `3b9874c2b237a75588210cd6bd8c209c497976c6c4cd7adacad220ef0d84342b`；包含 libnode.so 与群聊角色卡补丁）；上传 Release 仍待执行。
+- [x] 构建并上传签名 APK（2026-11-01 13:30 重新签名构建，176,421,949 字节，SHA-256 `71bc254b5c9ddc0c5157a65b1b63770f90d47abf2c95856fd3e2deb8672238b3`；`tool/audit-release.ps1` 通过，已作为 asset `697428556` 上传到 Release v0.1.0，`release/manifest-arm64.json` 同步更新）。
 - [x] 应用内更新使用固定官方清单地址，设置页不再允许覆盖。
 
 ## 暂缓事项
