@@ -11,5 +11,5 @@ class ThemeBridge {
     return ThemeSettings(mode: mode, seedColor: Color((raw['seedColor'] as num?)?.toInt() ?? 0xff8290ff), cardRadius: (raw['cardRadius'] as num?)?.toDouble() ?? 16, cardOpacity: (raw['cardOpacity'] as num?)?.toDouble() ?? 1, tintedBackground: raw['tintedBackground'] == true);
   }
 
-  static Future<void> save(ThemeSettings settings) => _channel.invokeMethod<void>('saveThemeSettings', {'mode': settings.mode.name, 'seedColor': settings.seedColor.value, 'cardRadius': settings.cardRadius, 'cardOpacity': settings.cardOpacity, 'tintedBackground': settings.tintedBackground});
+  static Future<void> save(ThemeSettings settings) => _channel.invokeMethod<void>('saveThemeSettings', {'mode': settings.mode.name, 'seedColor': settings.seedColor.toARGB32(), 'cardRadius': settings.cardRadius, 'cardOpacity': settings.cardOpacity, 'tintedBackground': settings.tintedBackground});
 }
