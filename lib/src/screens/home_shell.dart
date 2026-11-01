@@ -181,7 +181,12 @@ class _HomeShellState extends State<HomeShell> {
         }
       }
       setState(() => _state = _state.copyWith(status: RuntimeStatus.starting, phase: 'restart.begin', message: '正在启动 Runtime'));
-      await _bridge.restart();
+      final outcome = await _bridge.restart();
+      if (outcome['started'] != true && outcome['reason'] == 'preparing' && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('运行文件还在解包，完成后会自动启动；现在重启会丢掉已解包的文件'),
+        ));
+      }
       await _refreshState();
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重启请求失败：$error')));

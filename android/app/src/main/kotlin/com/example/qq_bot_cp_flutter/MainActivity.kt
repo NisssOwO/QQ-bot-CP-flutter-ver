@@ -52,12 +52,20 @@ class MainActivity : FlutterActivity() {
                 "requestNotificationPermission" -> requestNotificationPermission(result)
                 "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", true).apply(); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
                 "restartRuntime" -> {
-                    // A start request while the service is already alive would restart it and
-                    // abort the run in flight (including a slow first asset extraction), so
-                    // treat it as idempotent and let the running start finish.
-                    getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply()
-                    if (RuntimeService.serviceAlive) {
-                        result.success(mapOf("started" to false, "alreadyRunning" to true))
+                    val prefs = getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE)
+                    prefs.edit().putBoolean("userStopped", false).apply()
+                    // A slow first extraction is still running: restarting now would throw
+                    // away every unpacked file, so report it instead of silently doing nothing.
+                    val preparing = RuntimeService.serviceAlive &&
+                        prefs.getString("status", "stopped") == "starting" &&
+                        System.currentTimeMillis() - prefs.getLong("stageAt", 0L) < 120_000
+                    if (preparing) {
+                        result.success(mapOf("started" to false, "alreadyRunning" to true, "reason" to "preparing"))
+                    } else if (RuntimeService.serviceAlive) {
+                        // Restart inside the live service: stop/start would hit the same
+                        // instance and be dropped as a duplicate start.
+                        val error = RuntimeLauncher.restart(this, "user")
+                        result.success(mapOf("started" to (error == null), "alreadyRunning" to false, "reason" to error))
                     } else {
                         markRuntimeStopping("准备重启 Runtime")
                         stopService(Intent(this, RuntimeService::class.java))

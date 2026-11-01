@@ -20,6 +20,21 @@ object RuntimeLauncher {
         val intent = Intent(context, RuntimeService::class.java)
             .setAction(RuntimeService.ACTION_START)
             .putExtra(RuntimeService.EXTRA_SOURCE, source)
+        return start(context, intent)
+    }
+
+    /**
+     * Restarts a run that is already alive without stopping the service, because a
+     * stop/start pair would be delivered to the same instance and ignored as a duplicate.
+     */
+    fun restart(context: Context, source: String): String? {
+        val intent = Intent(context, RuntimeService::class.java)
+            .setAction(RuntimeService.ACTION_RESTART)
+            .putExtra(RuntimeService.EXTRA_SOURCE, source)
+        return start(context, intent)
+    }
+
+    private fun start(context: Context, intent: Intent): String? {
         return try {
             context.startForegroundService(intent)
             null

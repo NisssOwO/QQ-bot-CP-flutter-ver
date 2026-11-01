@@ -38,7 +38,9 @@ manager.sessions.set('qqbot:100000000:group:AAA', {
 const assembled = await assemble({}, { agent: groupAgent }, async () => ({ sections: [{ name: 'base', order: 0, text: 'base' }] }));
 const names = assembled.sections.map((section) => section.name);
 assert.ok(names.includes('qqbot:preset-fallback'), `expected fallback section, got ${names.join(',')}`);
-assert.equal(assembled.sections.find((s) => s.name === 'qqbot:preset-fallback').text, '# 角色卡：测试角色');
+const fallbackText = assembled.sections.find((s) => s.name === 'qqbot:preset-fallback').text;
+assert.ok(fallbackText.startsWith('# 角色卡：测试角色'), fallbackText);
+assert.ok(fallbackText.includes('角色切换提示'), 'fallback must ask the model to drop the earlier generic tone');
 assert.equal(assembled.sections[0].name, 'base', 'existing sections must stay');
 assert.deepEqual(fakePresets.calls, ['custom.role'], 'preset body resolved once per assembly');
 
