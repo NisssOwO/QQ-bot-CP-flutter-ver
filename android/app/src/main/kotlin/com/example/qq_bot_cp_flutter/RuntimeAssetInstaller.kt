@@ -177,6 +177,8 @@ object RuntimeAssetInstaller {
 
     private fun refreshAndroidRuntimeOverrides(context: Context, target: File) {
         val files = listOf(
+            // 运行时日志落盘钩子：让启动之后的每一行都能在 App 里看到。
+            "runtime/android-log-tap.cjs",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/inbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/outbound.js",
