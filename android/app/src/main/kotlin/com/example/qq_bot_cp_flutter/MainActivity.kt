@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
-import java.net.URLEncoder
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.File
@@ -435,15 +434,16 @@ class MainActivity : FlutterActivity() {
                 reply(mapOf("ok" to false, "stage" to "凭据", "message" to "请填写 AppID 和 AppSecret（输入框为空时会使用已保存的凭据）", "elapsedMs" to elapsed()))
                 return@Thread
             }
-            // 用 QQ 官方开放平台接口直接换取 access_token，凭据错误会返回 401/400。
+            // QQ 开放平台只接受 JSON body（appId/clientSecret）。用表单编码时服务端读不到 appId，
+            // 会谎称 "appid invalid"，所以这里必须发 JSON。
             try {
-                val body = "grant_type=client_credentials&client_id=${URLEncoder.encode(appId, "UTF-8")}&client_secret=${URLEncoder.encode(secret, "UTF-8")}"
+                val body = org.json.JSONObject().put("appId", appId).put("clientSecret", secret).toString()
                 val connection = (URL("https://bots.qq.com/app/getAppAccessToken").openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
                     connectTimeout = 8000
                     readTimeout = 12000
                     doOutput = true
-                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                    setRequestProperty("Content-Type", "application/json")
                     setRequestProperty("Accept", "application/json")
                 }
                 connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
@@ -454,11 +454,13 @@ class MainActivity : FlutterActivity() {
                 val token = json?.optString("access_token").orEmpty()
                 if (status in 200..299 && token.isNotBlank()) {
                     val expires = json?.optString("expires_in").orEmpty()
-                    reply(mapOf("ok" to true, "configured" to true, "stage" to "凭据与网关", "message" to "AppID/AppSecret 验证通过，已获取 access_token（有效期 ${expires} 秒）", "statusCode" to status, "elapsedMs" to elapsed()))
+                    reply(mapOf("ok" to true, "configured" to true, "stage" to "凭据", "message" to "AppID/AppSecret 验证通过，已获取 access_token（有效期 ${expires} 秒）", "statusCode" to status, "elapsedMs" to elapsed()))
                 } else {
                     val reason = json?.optString("message").orEmpty().ifBlank { text.take(120).trim().ifBlank { "服务端未返回原因" } }
-                    val hint = when {
-                        status == 401 || status == 400 -> "；请检查 AppID 与 AppSecret 是否填写正确（沙箱/正式环境不同）"
+                    val code = json?.optInt("code", 0) ?: 0
+                    val hint = when (code) {
+                        100016 -> "；AppID 或 AppSecret 不正确"
+                        100007 -> "；请求里没有可识别的 AppID"
                         else -> ""
                     }
                     reply(mapOf("ok" to false, "configured" to true, "stage" to "凭据", "message" to "换取 access_token 失败：$reason$hint", "statusCode" to status, "elapsedMs" to elapsed()))

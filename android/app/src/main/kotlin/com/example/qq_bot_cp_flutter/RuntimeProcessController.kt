@@ -75,10 +75,15 @@ class RuntimeProcessController(private val context: Context) {
     }
 
     /**
-     * Node runs from one app-owned copy under code_cache. The bundled binary is staged
-     * there because Android mounts app data and code_cache executable for this process.
+     * Android 10+ refuses to exec anything under the app's writable data dir, so a node
+     * binary copied into files/ or code_cache/ fails with "error=13, Permission denied".
+     * The native library dir is the one place the installer extracts executable files,
+     * so libnode.so from jniLibs is the primary candidate; the staged copy stays as a
+     * fallback for builds that ship without the native library.
      */
     private fun resolveNode(root: File): File {
+        val native = File(context.applicationInfo.nativeLibraryDir, "libnode.so")
+        if (native.isFile && native.canExecute()) return native
         val bundled = File(root, "bin/node")
         require(bundled.isFile) { "Runtime bundle is incomplete" }
         return stageExecutable(bundled)
