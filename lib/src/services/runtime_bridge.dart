@@ -38,6 +38,9 @@ class RuntimeBridge {
 
   Future<List<RuntimeLogEntry>> recentLogs() async => (await _call<List<dynamic>>('getRecentLogs', null, const Duration(seconds: 12), 2) ?? const []).whereType<Map>().map(_parseLog).toList();
 
+  /// Removes the persisted history so the log page starts from an empty list next start.
+  Future<void> clearLogs() async { await _call<void>('clearRuntimeLogs'); }
+
   Future<void> start() async { await _call<void>('startRuntime'); }
 
   /// Asks for the notification permission Android 13+ needs before the ongoing

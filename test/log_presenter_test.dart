@@ -32,4 +32,11 @@ void main() {
     expect(presentation.message, '收到群消息，准备回复');
     expect(presentation.detail, isNull);
   });
+
+  test('stamps every row with the clock and keeps the date for older rows', () {
+    final now = DateTime(2026, 11, 1, 18, 30);
+
+    expect(formatLogTime(DateTime(2026, 11, 1, 9, 5, 7), now: now), '09:05:07');
+    expect(formatLogTime(DateTime(2026, 10, 31, 23, 59, 1), now: now), '10-31 23:59:01');
+  });
 }

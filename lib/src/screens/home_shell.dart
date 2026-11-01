@@ -10,6 +10,7 @@ import '../models/role_card.dart';
 import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
 import '../services/log_presenter.dart';
+import '../services/public_ip_service.dart';
 import '../services/startup_stats.dart';
 import '../services/config_draft.dart';
 import '../services/background_tasks.dart';
@@ -39,6 +40,13 @@ class _HomeShellState extends State<HomeShell> {
   PublicConfig _publicConfig = const PublicConfig();
   int _index = 0;
   Map<String, String> _sessionRoles = const {};
+  String _publicIp = '未检测';
+  String _publicIpv6 = '未检测';
+  String _ipCheckedAt = '';
+  String _ipChangedAt = '';
+  bool _ipLoading = false;
+  bool _hidePublicIp = false;
+  String? _lastSeenIpv4;
 
   @override
   void initState() {
@@ -61,6 +69,7 @@ class _HomeShellState extends State<HomeShell> {
     _refreshState();
     _refreshConfig();
     _refreshSessionRoles();
+    _refreshPublicIp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartRuntime());
     _startStateWatchdog();
   }
@@ -189,13 +198,61 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  /// Looks up the phone's public address. The QQ open platform only accepts calls from
+  /// whitelisted IPs, and phones on mobile data change address between networks.
+  Future<void> _refreshPublicIp() async {
+    if (_ipLoading) return;
+    final timer = Stopwatch()..start();
+    setState(() => _ipLoading = true);
+    final result = await const PublicIpService().lookup();
+    timer.stop();
+    if (!mounted) return;
+    final changed = result.ipv4 != null && _lastSeenIpv4 != null && _lastSeenIpv4 != result.ipv4;
+    setState(() {
+      _ipLoading = false;
+      _publicIp = result.ipv4 ?? '无法获取';
+      _publicIpv6 = result.ipv6 ?? '无法获取';
+      _ipCheckedAt = _clock(result.checkedAt);
+      if (changed) _ipChangedAt = _clock(result.checkedAt);
+      if (result.ipv4 != null) _lastSeenIpv4 = result.ipv4;
+      _logs.add(RuntimeLogEntry(
+        time: result.checkedAt,
+        level: result.error == null ? LogLevel.info : LogLevel.warn,
+        module: 'public-ip',
+        message: result.error == null
+            ? '公网 IP 查询完成（${timer.elapsedMilliseconds} ms）${changed ? '，地址已变化' : ''}'
+            : '公网 IP 查询失败（${timer.elapsedMilliseconds} ms）：${result.error}',
+      ));
+    });
+  }
+
+  static String _clock(DateTime time) => '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
+
+  void _copyPublicIp(String value) {
+    if (value == '未检测' || value == '无法获取') return;
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已复制公网 IP：$value')));
+  }
+
+  /// Drops both the persisted history and the rows currently on screen.
+  Future<void> _clearLogs() async {
+    try {
+      await _bridge.clearLogs();
+      if (!mounted) return;
+      setState(_logs.clear);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('日志已清空')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('清空日志失败：$error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final startupStats = summarizeStartup(_logs);
     final pages = <Widget>[
-      _OverviewPage(state: _state, startupStats: startupStats, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
+      _OverviewPage(state: _state, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
-      _LogPage(logs: _logs),
+      _LogPage(logs: _logs, onClear: _clearLogs),
       _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
@@ -219,11 +276,20 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.startupStats, required this.qqConfigured, required this.llmConfigured, required this.onOpenAi, required this.onRestart});
+  const _OverviewPage({required this.state, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.ipCheckedAt, required this.ipChangedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
   final RuntimeState state;
   final StartupStats startupStats;
+  final String publicIp;
+  final String publicIpv6;
+  final String ipCheckedAt;
+  final String ipChangedAt;
+  final bool loadingIp;
+  final bool hideIp;
   final bool qqConfigured;
   final bool llmConfigured;
+  final VoidCallback onRefreshIp;
+  final ValueChanged<String> onCopyIp;
+  final VoidCallback onToggleHideIp;
   final VoidCallback onOpenAi;
   final VoidCallback onRestart;
 
@@ -232,6 +298,18 @@ class _OverviewPage extends StatelessWidget {
         Card(child: ListTile(leading: Icon(Icons.circle, color: _statusColor(context, state.status)), title: Text(_statusLabel(state.status)), subtitle: Text(_phaseDescription(state, startupStats)), trailing: Text(_formatDuration(state.elapsedMs)))),
         if (state.status == RuntimeStatus.failed) Card(child: ListTile(leading: Icon(Icons.error_outline, color: AppThemeTokens.of(context).error), title: Text('启动失败：${state.phase}'), subtitle: Text('${state.message.isEmpty ? '请打开日志查看详细信息' : state.message}${state.errorCode == null ? '' : '（错误码 ${state.errorCode}）'}${state.exitCode == null ? '' : '（退出码 ${state.exitCode}）'}\n建议：检查配置、网络和日志中的错误码后重试。'))),
         Card(child: ListTile(leading: const Icon(Icons.timer_outlined), title: const Text('启动耗时统计'), subtitle: Text(_startupSummary(startupStats)))),
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Expanded(child: Text('设备公网 IP', style: TextStyle(fontWeight: FontWeight.bold))),
+            IconButton(tooltip: hideIp ? '显示 IP' : '隐藏 IP', onPressed: onToggleHideIp, icon: Icon(hideIp ? Icons.visibility_off : Icons.visibility)),
+            loadingIp ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))) : IconButton(tooltip: '重新检测', onPressed: onRefreshIp, icon: const Icon(Icons.refresh)),
+          ]),
+          _IpLine(label: 'IPv4', value: publicIp, hidden: hideIp, onCopy: onCopyIp),
+          _IpLine(label: 'IPv6', value: publicIpv6, hidden: hideIp, onCopy: onCopyIp),
+          if (ipCheckedAt.isNotEmpty) Text('检测时间：$ipCheckedAt${ipChangedAt.isEmpty ? '' : ' · 上次变化：$ipChangedAt'}', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 4),
+          Text('QQ 开放平台按 IP 白名单放行，换 Wi-Fi 或手机流量后地址会变，需要回来重新配置。', style: Theme.of(context).textTheme.bodySmall),
+        ]))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('首次启动说明', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -321,6 +399,27 @@ class _OverviewPage extends StatelessWidget {
   }
 }
 
+/// One address row inside the public IP card. Long addresses get their own line so the
+/// copy button keeps a stable position on narrow screens.
+class _IpLine extends StatelessWidget {
+  const _IpLine({required this.label, required this.value, required this.hidden, required this.onCopy});
+  final String label;
+  final String value;
+  final bool hidden;
+  final ValueChanged<String> onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final missing = value == '未检测' || value == '无法获取';
+    final shown = hidden && !missing ? '••••••••' : value;
+    return Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+      SizedBox(width: 52, child: Text(label, style: Theme.of(context).textTheme.bodySmall)),
+      Expanded(child: SelectableText(shown, style: TextStyle(fontFamily: missing ? null : 'monospace'))),
+      if (!hidden && !missing) IconButton(tooltip: '复制 $label', onPressed: () => onCopy(value), icon: const Icon(Icons.copy, size: 18)),
+    ]);
+  }
+}
+
 class _CommandCopyRow extends StatelessWidget {
   const _CommandCopyRow({required this.command, required this.description});
   final String command;
@@ -349,8 +448,9 @@ const List<(String, String)> _chatCommands = [
 ];
 
 class _LogPage extends StatefulWidget {
-  const _LogPage({required this.logs});
+  const _LogPage({required this.logs, required this.onClear});
   final List<RuntimeLogEntry> logs;
+  final Future<void> Function() onClear;
   @override State<_LogPage> createState() => _LogPageState();
 }
 
@@ -390,6 +490,17 @@ class _LogPageState extends State<_LogPage> {
     await Clipboard.setData(ClipboardData(text: content));
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制脱敏日志')));
   }
+  /// Clearing is destructive and cannot be undone from the page, so ask once up front.
+  Future<void> _confirmClear() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('清空日志'),
+      content: const Text('将删除这台设备上保存的全部运行日志，清空后无法恢复。'),
+      actions: [TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('清空'))],
+    ));
+    if (confirmed != true) return;
+    await widget.onClear();
+    if (mounted) await _applyFilter();
+  }
   Color _levelColor(BuildContext context, LogLevel value) => switch (value) {
     LogLevel.error => AppThemeTokens.of(context).error,
     LogLevel.warn => AppThemeTokens.of(context).warning,
@@ -407,9 +518,10 @@ class _LogPageState extends State<_LogPage> {
         Expanded(child: DropdownButtonFormField<LogLevel?>(value: level, decoration: const InputDecoration(labelText: '级别', border: OutlineInputBorder()), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) { setState(() => level = value); _applyFilter(); })),
         const SizedBox(width: 8),
         Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) { module = value; _applyFilter(); })),
+        IconButton(tooltip: '清空日志', onPressed: widget.logs.isEmpty ? null : _confirmClear, icon: const Icon(Icons.delete_sweep)),
         IconButton(tooltip: '复制脱敏日志', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
       ])),
-      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = _levelColor(context, presentation.level); return ListTile(leading: Icon(_levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${presentation.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
+      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = _levelColor(context, presentation.level); return ListTile(leading: Icon(_levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${formatLogTime(entry.time)} · ${presentation.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
     ]);
   }
 }

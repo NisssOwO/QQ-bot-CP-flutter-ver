@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:qq_bot_cp/main.dart';
 
 void main() {
@@ -22,6 +23,7 @@ void main() {
     expect(find.text('首次启动说明'), findsOneWidget);
     expect(find.text('启动 Runtime'), findsOneWidget);
     await tester.pump();
+    await tester.scrollUntilVisible(find.textContaining('API Key'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('API Key'), findsOneWidget);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('qq_bot_cp/runtime'), null);
   });

@@ -50,3 +50,12 @@ LogPresentation presentLog(RuntimeLogEntry entry) {
   }
   return LogPresentation(raw, level: level);
 }
+/// Timestamp shown on every log row. Rows older than today keep their date so a history
+/// that survived a restart still reads in order.
+String formatLogTime(DateTime time, {DateTime? now}) {
+  final reference = now ?? DateTime.now();
+  String two(int value) => value.toString().padLeft(2, '0');
+  final clock = '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
+  final sameDay = time.year == reference.year && time.month == reference.month && time.day == reference.day;
+  return sameDay ? clock : '${two(time.month)}-${two(time.day)} $clock';
+}
