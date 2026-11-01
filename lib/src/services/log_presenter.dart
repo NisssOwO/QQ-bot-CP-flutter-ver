@@ -7,17 +7,22 @@ import '../models/runtime_log.dart';
 /// plugin that failed to import), [detail] keeps the original text so it can
 /// still be inspected without pushing raw noise into the main column.
 class LogPresentation {
-  const LogPresentation(this.message, {required this.level, this.detail});
+  const LogPresentation(this.message, {required this.level, this.detail, this.muted = false});
   final String message;
 
-  /// The level to paint the row with. Some runtime messages arrive as errors
-  /// but only describe an optional plugin waiting for a service, so they are
-  /// shown as information instead of a red failure.
+  /// The level the runtime actually reported. It is never rewritten here: the
+  /// level filter and the row colour have to agree, otherwise the 警告 filter
+  /// returns nothing while warnings are painted green.
   final LogLevel level;
+
+  /// Optional-plugin noise keeps its level but is painted in a neutral colour,
+  /// so a warning caused by a plugin we deliberately disabled does not look
+  /// like a chat failure.
+  final bool muted;
   final String? detail;
 }
 
-/// Patterns whose original level is an error but which do not affect chatting.
+/// Patterns that describe optional runtime plumbing rather than a chat failure.
 final List<RegExp> _harmless = [
   RegExp(r'plugin-manager.*failed to import'),
   RegExp(r'ERR_MODULE_NOT_FOUND'),
@@ -29,6 +34,8 @@ final List<RegExp> _harmless = [
 /// Runtime messages that used to surface as-is but mean nothing to a user.
 /// Order matters: the first rule that matches wins.
 final List<(RegExp, String)> _rules = [
+  (RegExp(r'^\[inbound\]\s*'), ''),
+  (RegExp(r'^\[outbound\]\s*'), ''),
   (RegExp(r'Bot ready!'), 'QQ 机器人已连接，可以开始聊天'),
   (RegExp(r'^restart\.complete'), '启动完成'),
   (RegExp(r'preset fallback applied'), '已把当前角色卡应用到这批旧会话'),
@@ -41,15 +48,21 @@ final List<(RegExp, String)> _rules = [
 
 LogPresentation presentLog(RuntimeLogEntry entry) {
   final raw = entry.message;
-  final level = _harmless.any((pattern) => pattern.hasMatch(raw)) ? LogLevel.info : entry.level;
+  final muted = _harmless.any((pattern) => pattern.hasMatch(raw));
   for (final rule in _rules) {
     if (!rule.$1.hasMatch(raw)) continue;
+    // 收发消息的行自带中文说明，只需去掉给机器看的标签。
+    if (rule.$2.isEmpty) {
+      final text = raw.replaceFirst(rule.$1, '');
+      return LogPresentation(text, level: entry.level, muted: muted, detail: text == raw ? null : raw);
+    }
     // A clean headline needs no detail block; only keep the raw text when it
     // still carries information the user could act on.
-    return LogPresentation(rule.$2, level: level, detail: raw == rule.$2 ? null : raw);
+    return LogPresentation(rule.$2, level: entry.level, muted: muted, detail: raw == rule.$2 ? null : raw);
   }
-  return LogPresentation(raw, level: level);
+  return LogPresentation(raw, level: entry.level, muted: muted);
 }
+
 /// Timestamp shown on every log row. Rows older than today keep their date so a history
 /// that survived a restart still reads in order.
 String formatLogTime(DateTime time, {DateTime? now}) {

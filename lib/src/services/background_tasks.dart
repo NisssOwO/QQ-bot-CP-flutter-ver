@@ -18,9 +18,7 @@ Future<List<int>> filterLogIndexesInBackground(
       for (var index = 0; index < entries.length; index++)
         if ((level == null || entries[index]['level'] == level) &&
             (needle.isEmpty ||
-                '${entries[index]['module'] ?? ''}'
-                    .toLowerCase()
-                    .contains(needle)))
+                '${entries[index]['module'] ?? ''}'.toLowerCase() == needle))
           index,
     ];
   });
