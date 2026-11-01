@@ -113,7 +113,7 @@ class RuntimeBridge {
 
   Future<void> deleteConfigHistory() async { await _call<void>('deleteConfigHistory'); }
 
-  Future<Map<String, Object?>> testQqConnection() async => ((await _call<Map<dynamic, dynamic>>('testQqConnection', null, const Duration(seconds: 12), 1)) ?? {}).map((key, value) => MapEntry('$key', value));
+  Future<Map<String, Object?>> testQqConnection({String appId = '', String secret = ''}) async => ((await _call<Map<dynamic, dynamic>>('testQqConnection', {'appId': appId, 'secret': secret}, const Duration(seconds: 20), 1)) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<Map<String, String>> appInfo() async => ((await _call<Map<dynamic, dynamic>>('getAppInfo', null, const Duration(seconds: 12), 2)) ?? {}).map((key, value) => MapEntry('$key', '$value'));
   Future<Map<String, Object?>> pickAndInstallApk() async => ((await _call<Map<dynamic, dynamic>>('pickAndInstallApk')) ?? {}).map((key, value) => MapEntry('$key', value));
   Future<String> updateCachePath() async => await _call<String>('getUpdateCachePath') ?? '';
