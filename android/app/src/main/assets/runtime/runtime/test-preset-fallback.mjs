@@ -10,7 +10,7 @@ const fakePresets = {
   calls: [],
   async prompt(id) {
     this.calls.push(id);
-    return id === 'custom.role' ? '# 角色卡：测试角色' : '';
+    return id === 'custom.demo' ? '# 角色卡：测试角色' : '';
   },
 };
 const ctx = {
@@ -18,7 +18,7 @@ const ctx = {
   get(name) { return name === 'agentPresets' ? fakePresets : undefined; },
 };
 const logger = { info() {}, warn() {}, debug() {}, error() {} };
-const config = { appId: '100000000', preset: 'custom.role', groupPrompt: '', directPrompt: '', sessionIdleTimeout: 0 };
+const config = { appId: '100000000', preset: 'custom.demo', groupPrompt: '', directPrompt: '', sessionIdleTimeout: 0 };
 const manager = new SessionManager(ctx, { get: () => undefined }, config, logger);
 
 const assemble = handlers.get('system-prompt/assemble');
@@ -42,7 +42,7 @@ const fallbackText = assembled.sections.find((s) => s.name === 'qqbot:preset-fal
 assert.ok(fallbackText.startsWith('# 角色卡：测试角色'), fallbackText);
 assert.ok(fallbackText.includes('角色切换提示'), 'fallback must ask the model to drop the earlier generic tone');
 assert.equal(assembled.sections[0].name, 'base', 'existing sections must stay');
-assert.deepEqual(fakePresets.calls, ['custom.role'], 'preset body resolved once per assembly');
+assert.deepEqual(fakePresets.calls, ['custom.demo'], 'preset body resolved once per assembly');
 
 // 会话已经挂了同一个 preset 时不能再重复注入，否则角色正文会在 request 里出现两遍。
 const boundAgent = { name: 'bound-agent' };
@@ -52,7 +52,7 @@ manager.sessions.set('qqbot:100000000:c2c:BBB', {
   agent: boundAgent,
   scope: 'c2c',
   peerId: 'BBB',
-  agentPreset: 'custom.role',
+  agentPreset: 'custom.demo',
   lastActivity: Date.now(),
 });
 const second = await assemble({}, { agent: boundAgent }, async () => ({ sections: [] }));

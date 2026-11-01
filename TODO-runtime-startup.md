@@ -1,8 +1,8 @@
 # QQ-bot-CP 启动链路问题 TODO
 
-工作区：`本地工程目录`
+工作区：本地 Flutter 工程目录
 基线提交：`5ed4585 fix runtime process exec on HyperOS`
-真机：Android 16 / arm64-v8a / 序列号 `未公开设备` / HyperOS V816（`未公开机型`）
+真机：Android 16 / arm64-v8a / HyperOS V816
 
 本文件只登记「进入应用 → 点击启动 Runtime → Node/DSH 起来 → 连上 QQ」这条链路的问题与做法。产品功能规划仍在 `TODO-flutter-refactor.md`。每项都写明：现象、证据、根因、做法、验收方式。改完一项就在本节勾选，并补上提交号和验收结果。
 
@@ -174,6 +174,6 @@ SXX | 提交 <hash> | 构建 <apk 路径/大小/sha256 前 12 位> | 真机：<�
 
 ## 3. 已知风险与前提
 
-- 所有验证都在 `未公开设备` 这一台 HyperOS 设备上做，通用性需要另一台设备复核。
+- 所有验证都在同一台 HyperOS 设备上做，通用性需要另一台设备复核。
 - 真实 QQ AppID/AppSecret、AI API Key 只保存在手机内，验证时只读取是否已配置，不读取内容。
-- `F:\` 在 2026-10-31 曾出现整个盘只读，导致 `git add` 写 `.git/index.lock` 失败；后续提交前先确认 `.git` 可写。
+- 工作盘在 2026-10-31 曾出现整个盘只读，导致 `git add` 写 `.git/index.lock` 失败；后续提交前先确认 `.git` 可写。
