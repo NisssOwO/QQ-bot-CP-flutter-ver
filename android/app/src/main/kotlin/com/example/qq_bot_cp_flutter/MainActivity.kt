@@ -77,6 +77,7 @@ class MainActivity : FlutterActivity() {
                 "getRuntimeState" -> result.success(runtimeState())
                 "getSessionRoleStatus" -> result.success(sessionRoleStatus())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
+                "clearRuntimeLogs" -> result.success(clearRuntimeLogs())
                 "getPublicConfig" -> result.success(publicConfig())
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "fetchModels" -> fetchModels(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
@@ -139,6 +140,16 @@ class MainActivity : FlutterActivity() {
             "userStopped" to prefs.getBoolean("userStopped", false),
             "stageAt" to prefs.getLong("stageAt", 0L),
         )
+    }
+
+    /**
+     * Forgets every stored log line. Crashing and restarting used to leave rows from the
+     * previous run on the page, so clearing has to touch the persisted history rather than
+     * only the list held by the Flutter side.
+     */
+    private fun clearRuntimeLogs(): Any? {
+        getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().remove("logHistory").apply()
+        return null
     }
 
     private fun startRuntimeService() {
