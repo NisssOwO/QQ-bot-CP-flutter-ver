@@ -1,10 +1,10 @@
 {
-  "versionName": "0.1.4",
-  "versionCode": 5,
+  "versionName": "0.2.0",
+  "versionCode": 9,
   "abi": "arm64-v8a",
   "minSdk": 24,
-  "sizeBytes": 176439213,
-  "sha256": "bdb94d49dfa2e09e5bd628f739a9e8c63f15699cfbf1cd900f234a03de71917f",
-  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.1.4/QQ-bot-CP-v0.1.4-arm64.apk",
-  "releaseNotes": "QQ-bot-CP Flutter 版 0.1.4（Android 16 arm64）。恢复总览页的设备公网 IP 卡片：显示 IPv4/IPv6、检测时间与上次变化时间，支持一键复制，方便按 QQ 开放平台的白名单重新配置。日志页每一行都带上时间戳，并新增清空日志入口（同时清掉已保存的历史）。"
+  "sizeBytes": 176459462,
+  "sha256": "768f9629c91ac5140d0b9713e33dee2a2768769a343572bde6f5475a447e140c",
+  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.2.0/QQ-bot-CP-v0.2.0-arm64.apk",
+  "releaseNotes": "QQ-bot-CP Flutter 版 0.2.0（Android 16 arm64）。界面重做为暗色卡片：渐变状态卡直接重启，平板左栏双列、手机底部导航；说明文字集中到设置里的「说明与教程」。运行时日志写入文件，重启应用后仍可回看；日志页支持级别/模块筛选与搜索。更新检查改为直接比较 GitHub 最新 Release。"
 }
