@@ -81,4 +81,39 @@
 - id: tool-goal
   disabled: true
 
+# 手机端只有聊天功能，下列插件依赖桌面环境的 shell/workingDirectory/subagents
+# 或遥测上报，加载后必然处于 pending / import 失败状态，只会污染启动日志。
+- id: plugin-manager
+  disabled: true
+- id: tool-plugin-manager
+  disabled: true
+- id: otel
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+- id: permission
+  disabled: true
+- id: agent-instructions
+  disabled: true
+- id: tool-skill
+  disabled: true
+- id: subagent
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: workflow-ptc
+  disabled: true
+- id: tool-workflow
+  disabled: true
+
 
