@@ -21,6 +21,7 @@ object RuntimeAssetInstaller {
         if (ready) {
             refreshEntry(context, target)
             refreshProfile(context, target)
+            refreshRolePresets(context, target)
             refreshPiAiManifest(context, target)
             refreshOpenAiParser(context, target)
             refreshTurnErrorNormalizer(context, target)
@@ -38,6 +39,7 @@ object RuntimeAssetInstaller {
         }
         refreshEntry(context, target)
         refreshProfile(context, target)
+        refreshRolePresets(context, target)
         refreshPiAiManifest(context, target)
         refreshOpenAiParser(context, target)
         refreshTurnErrorNormalizer(context, target)
@@ -78,6 +80,24 @@ object RuntimeAssetInstaller {
                 FileOutputStream(File(target, "runtime-entry.mjs")).use { output -> input.copyTo(output, 8 * 1024) }
             }
         } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * 已安装的机器上 copyTree 会跳过已存在的文件，角色插件换新后不会自动生效。
+     * session-manager 现在每轮调用 presets.prompt()，所以这里单独覆盖这份插件。
+     */
+    private fun refreshRolePresets(context: Context, target: File) {
+        val relative = "profiles/qqbot/node_modules/@shiny-colors/role-presets/index.js"
+        val source = if (hasAssets(context, "runtime/dsh-home")) "runtime/dsh-home" else "runtime/assets-dsh-home"
+        val output = File(target, "dsh-home").resolve(relative)
+        try {
+            context.assets.open("$source/$relative").use { input ->
+                output.parentFile?.mkdirs()
+                FileOutputStream(output).use { file -> input.copyTo(file, 16 * 1024) }
+            }
+        } catch (_: Exception) {
+            // 旧 bundle 没有这份插件时保持原样，运行时只会少一次兜底注入。
         }
     }
 
