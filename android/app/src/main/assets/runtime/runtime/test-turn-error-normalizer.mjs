@@ -6,6 +6,7 @@ assert.equal(normalizeTurnError({ code: 'INVALID_CONFIG', message: 'thinkingForm
 assert.equal(normalizeTurnError({ code: 'MODEL_NOT_FOUND', message: 'model does not exist' }).code, 'AI_MODEL_NOT_FOUND');
 assert.equal(normalizeTurnError({ code: 'ETIMEDOUT', message: 'connection timed out' }).code, 'AI_TIMEOUT');
 assert.equal(normalizeTurnError({ code: 'TRANSPORT', message: 'Connection error' }).code, 'AI_NETWORK_ERROR');
+assert.equal(normalizeTurnError({ code: 'AI_UNKNOWN', message: 'ToolOutcomeUnknownError: TOOL_OUTCOME_UNKNOWN' }).code, 'AI_TOOL_UNAVAILABLE');
 assert.match(normalizeTurnError({ code: 'SOMETHING_ELSE', message: 'unknown' }).message, /详细错误/);
 
 console.log('PASS turn error normalization');

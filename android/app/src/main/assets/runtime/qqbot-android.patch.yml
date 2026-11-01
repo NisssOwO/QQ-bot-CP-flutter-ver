@@ -69,6 +69,14 @@
 - id: tool-fs-search
   disabled: true
 
+# 手机上没有可用的抓取通道：模型一旦尝试 web_fetch，工具会以
+# TOOL_OUTCOME_UNKNOWN 结束整轮对话，聊天里只剩一条报错。聊天机器人不需要
+# 联网工具，直接关掉，模型会用自己的知识回答。
+- id: tool-web
+  disabled: true
+- id: web-fetch-http
+  disabled: true
+
 - id: image-offload
   disabled: true
 
