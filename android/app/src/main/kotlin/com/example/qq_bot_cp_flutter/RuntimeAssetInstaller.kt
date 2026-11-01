@@ -172,6 +172,7 @@ object RuntimeAssetInstaller {
     private fun refreshAndroidRuntimeOverrides(context: Context, target: File) {
         val files = listOf(
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/inbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/outbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/session.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/preset.js",

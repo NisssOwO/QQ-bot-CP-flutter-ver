@@ -456,9 +456,15 @@ class _LogPage extends StatefulWidget {
 
 class _LogPageState extends State<_LogPage> {
   LogLevel? level;
-  String module = '';
+  String? module;
   List<RuntimeLogEntry> filtered = const [];
   bool filtering = false;
+
+  /// 只在日志里实际出现过的模块，避免让用户猜模块名。
+  List<String> _moduleOptions() {
+    final names = widget.logs.map((entry) => entry.module).toSet().toList()..sort();
+    return names;
+  }
   @override
   void initState() {
     super.initState();
@@ -472,10 +478,12 @@ class _LogPageState extends State<_LogPage> {
   Future<void> _applyFilter() async {
     if (mounted) setState(() => filtering = true);
     final snapshot = List<RuntimeLogEntry>.from(widget.logs);
+    // 清空日志或换了筛选后，选中的模块可能已经不存在，此时回退到“全部模块”。
+    final selected = _moduleOptions().contains(module) ? module : null;
     final indexes = await filterLogIndexesInBackground(snapshot.map((entry) => <String, Object?>{
       'level': entry.level.name,
       'module': entry.module,
-    }).toList(), level?.name, module);
+    }).toList(), level?.name, selected ?? '');
     if (!mounted) return;
     setState(() {
       filtered = indexes.map((index) => snapshot[index]).toList().reversed.toList();
@@ -517,11 +525,11 @@ class _LogPageState extends State<_LogPage> {
       Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 4), child: Row(children: [
         Expanded(child: DropdownButtonFormField<LogLevel?>(value: level, decoration: const InputDecoration(labelText: '级别', border: OutlineInputBorder()), items: const [DropdownMenuItem<LogLevel?>(value: null, child: Text('全部')), DropdownMenuItem(value: LogLevel.info, child: Text('信息')), DropdownMenuItem(value: LogLevel.warn, child: Text('警告')), DropdownMenuItem(value: LogLevel.error, child: Text('错误'))], onChanged: (value) { setState(() => level = value); _applyFilter(); })),
         const SizedBox(width: 8),
-        Expanded(child: TextField(decoration: const InputDecoration(labelText: '模块筛选', border: OutlineInputBorder()), onChanged: (value) { module = value; _applyFilter(); })),
+        Expanded(child: DropdownButtonFormField<String?>(key: ValueKey('module-${module ?? 'all'}-${_moduleOptions().length}'), initialValue: _moduleOptions().contains(module) ? module : null, decoration: const InputDecoration(labelText: '模块', border: OutlineInputBorder()), items: [const DropdownMenuItem<String?>(value: null, child: Text('全部模块')), for (final name in _moduleOptions()) DropdownMenuItem<String?>(value: name, child: Text(name))], onChanged: (value) { setState(() => module = value); _applyFilter(); })),
         IconButton(tooltip: '清空日志', onPressed: widget.logs.isEmpty ? null : _confirmClear, icon: const Icon(Icons.delete_sweep)),
         IconButton(tooltip: '复制脱敏日志', onPressed: widget.logs.isEmpty ? null : _export, icon: const Icon(Icons.copy_all)),
       ])),
-      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = _levelColor(context, presentation.level); return ListTile(leading: Icon(_levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${formatLogTime(entry.time)} · ${presentation.level.name} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
+      Expanded(child: filtering ? const Center(child: CircularProgressIndicator()) : filtered.isEmpty ? const Center(child: Text('暂无匹配的 Runtime 日志')) : ListView.builder(padding: const EdgeInsets.all(12), itemCount: filtered.length, itemBuilder: (_, index) { final entry = filtered[index]; final presentation = presentLog(entry); final color = presentation.muted ? Theme.of(context).colorScheme.outline : _levelColor(context, presentation.level); return ListTile(leading: Icon(presentation.muted ? Icons.do_not_disturb_on_outlined : _levelIcon(presentation.level), color: color), title: Text(presentation.message, style: TextStyle(color: color)), subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [ Text('${formatLogTime(entry.time)} · ${presentation.level.name}${presentation.muted ? '（已忽略）' : ''} · ${entry.module}${entry.errorCode == null ? '' : ' · ${entry.errorCode}'}${entry.elapsedMs == null ? '' : ' · ${entry.elapsedMs} ms'}${entry.runId == null ? '' : ' · run ${entry.runId}'}'), if (presentation.detail != null) Padding(padding: const EdgeInsets.only(top: 2), child: Text('原始信息：${presentation.detail!}', maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'))), ])); })),
     ]);
   }
 }

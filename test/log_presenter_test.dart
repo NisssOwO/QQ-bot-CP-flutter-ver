@@ -23,7 +23,26 @@ void main() {
     final presentation = presentLog(entry('tool-workflow: pending (waiting for service: workflowEngine)', level: LogLevel.error, module: 'node'));
 
     expect(presentation.message, '部分插件在等待依赖，启动完成后会自动生效');
-    expect(presentation.level, LogLevel.info);
+    expect(presentation.level, LogLevel.error);
+    expect(presentation.muted, isTrue);
+  });
+
+  test('keeps warning rows warning so the 警告 filter can find them', () {
+    final presentation = presentLog(entry('dsh: warning: deprecation', level: LogLevel.warn, module: 'node'));
+
+    expect(presentation.level, LogLevel.warn);
+    expect(presentation.muted, isFalse);
+  });
+
+  test('shows chat traffic without the machine tag and keeps the raw line', () {
+    final inbound = presentLog(entry('[inbound] 收到群消息 · 1CDE5232 · 12 字 · "你好"', module: 'qq'));
+
+    expect(inbound.message, '收到群消息 · 1CDE5232 · 12 字 · "你好"');
+    expect(inbound.detail, startsWith('[inbound]'));
+
+    final outbound = presentLog(entry('[outbound] 已回复群消息 · 86 字 · 1 段 · 1240 ms', module: 'qq'));
+
+    expect(outbound.message, '已回复群消息 · 86 字 · 1 段 · 1240 ms');
   });
 
   test('leaves ordinary messages untouched and without a detail block', () {
