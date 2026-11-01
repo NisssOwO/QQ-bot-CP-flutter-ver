@@ -178,3 +178,8 @@
 - [x] P3：角色创建不要求用户手填 ID，角色可安全切换（`role_id.dart` 自动生成 ID，删除/覆盖二次确认，默认角色同步 presets）。
 - [x] P4：QQ 指令和私聊/群聊会话状态清晰（九条指令带说明并支持复制，`/new`、`/preset` 有明确反馈，私聊与群聊使用独立会话键）。
 - [x] P5：Android 16 真机回归通过并完成发布审计（配置/错误 Key/模型请求/启动耗时/日志/指令/群聊 `@` 全部真机验证；签名 APK 审计通过并已上传 Release；仅「长时间锁屏」与「Android 9 机型」因缺少对应条件留在暂缓事项）。
+
+## 运行期修复记录
+
+- 重装或恢复备份后角色卡不生效：设置里的角色卡被系统备份恢复，但 `files/runtime` 是随包重新解包的，里面没有 `presets` 文件，`LLM_PRESET` 指向查不到的角色卡。`RolePresetSync` 在打开角色页、启动 Runtime、点重启时补写缺失的 `preset.<id>.md/.json`，日志显示补写条目，已存在的人格文件不覆盖（`android/app/src/test/.../RolePresetSyncTest.kt`，真机 0.1.2 已验证日志出现「已把缺失的角色卡写回运行目录：custom.role」）。
+- 诊断经验：给 release 构建加 `isDebuggable = true` 会让 Flutter 按调试模式打包，产物既改名成 `app-debug.apk` 又在启动时原生崩溃，不能用来查看 `run-as` 目录；界面文字用 `adb shell uiautomator dump` 读 `content-desc` 即可，无需可调试包。
