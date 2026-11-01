@@ -10,3 +10,4 @@ android/app/src/main/assets/runtime/*
 !android/app/src/main/assets/runtime/.dsh-home/
 release/*.apk
 work/
+tool/personal-markers.local.txt
