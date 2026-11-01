@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
+import java.net.URLEncoder
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.File
@@ -75,7 +76,7 @@ class MainActivity : FlutterActivity() {
                 "testLlmRequest" -> testLlmRequest(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getConfigHistory" -> result.success(configHistory())
                 "deleteConfigHistory" -> { getSharedPreferences("public-config-history", MODE_PRIVATE).edit().remove("items").apply(); result.success(null) }
-                "testQqConnection" -> testQqConnection(result)
+                "testQqConnection" -> testQqConnection(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "getAppInfo" -> result.success(appInfo())
                 "pickAndInstallApk" -> pickAndInstallApk(result)
                 "getUpdateCachePath" -> result.success(File(cacheDir, "online-update.apk").absolutePath)
@@ -420,26 +421,50 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun testQqConnection(result: MethodChannel.Result) {
+    private fun testQqConnection(values: Map<*, *>, result: MethodChannel.Result) {
         Thread {
-            val credentials = CredentialStore(this)
-            val configured = credentials.has("qqbotAppId") && credentials.has("qqbotSecret")
-            if (!configured) {
-                runOnUiThread { result.success(mapOf("configured" to false, "stage" to "config", "message" to "AppID 或 AppSecret 未配置")) }
+            val started = System.currentTimeMillis()
+            fun elapsed() = System.currentTimeMillis() - started
+            fun reply(body: Map<String, Any?>) = runOnUiThread { result.success(body) }
+            val store = CredentialStore(this)
+            val typedId = (values["appId"] as? String ?: "").trim()
+            val typedSecret = (values["secret"] as? String ?: "").trim()
+            val appId = typedId.ifBlank { store.read("qqbotAppId") }
+            val secret = typedSecret.ifBlank { store.read("qqbotSecret") }
+            if (appId.isBlank() || secret.isBlank()) {
+                reply(mapOf("ok" to false, "stage" to "凭据", "message" to "请填写 AppID 和 AppSecret（输入框为空时会使用已保存的凭据）", "elapsedMs" to elapsed()))
                 return@Thread
             }
+            // 用 QQ 官方开放平台接口直接换取 access_token，凭据错误会返回 401/400。
             try {
-                val started = System.currentTimeMillis()
-                val connection = (URL("https://api.sgroup.qq.com").openConnection() as HttpURLConnection).apply {
-                    requestMethod = "HEAD"
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                val body = "grant_type=client_credentials&client_id=${URLEncoder.encode(appId, "UTF-8")}&client_secret=${URLEncoder.encode(secret, "UTF-8")}"
+                val connection = (URL("https://bots.qq.com/app/getAppAccessToken").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 12000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                    setRequestProperty("Accept", "application/json")
                 }
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                 val status = connection.responseCode
+                val text = (if (status in 200..299) connection.inputStream else connection.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
                 connection.disconnect()
-                runOnUiThread { result.success(mapOf("configured" to true, "stage" to "network", "message" to "官方网关可达（未执行登录）", "statusCode" to status, "elapsedMs" to (System.currentTimeMillis() - started))) }
+                val json = try { org.json.JSONObject(text) } catch (_: Exception) { null }
+                val token = json?.optString("access_token").orEmpty()
+                if (status in 200..299 && token.isNotBlank()) {
+                    val expires = json?.optString("expires_in").orEmpty()
+                    reply(mapOf("ok" to true, "configured" to true, "stage" to "凭据与网关", "message" to "AppID/AppSecret 验证通过，已获取 access_token（有效期 ${expires} 秒）", "statusCode" to status, "elapsedMs" to elapsed()))
+                } else {
+                    val reason = json?.optString("message").orEmpty().ifBlank { text.take(120).trim().ifBlank { "服务端未返回原因" } }
+                    val hint = when {
+                        status == 401 || status == 400 -> "；请检查 AppID 与 AppSecret 是否填写正确（沙箱/正式环境不同）"
+                        else -> ""
+                    }
+                    reply(mapOf("ok" to false, "configured" to true, "stage" to "凭据", "message" to "换取 access_token 失败：$reason$hint", "statusCode" to status, "elapsedMs" to elapsed()))
+                }
             } catch (error: Exception) {
-                runOnUiThread { result.success(mapOf("configured" to true, "stage" to "network", "message" to "官方网关不可达：${error.message ?: error}")) }
+                reply(mapOf("ok" to false, "configured" to true, "stage" to "网络", "message" to "无法连接 bots.qq.com：${error.message ?: error}", "elapsedMs" to elapsed()))
             }
         }.start()
     }

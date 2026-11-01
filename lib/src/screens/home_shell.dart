@@ -445,6 +445,7 @@ class _ConfigPageState extends State<_ConfigPage> {
   final secret = TextEditingController();
   final apiKey = TextEditingController();
   bool loading = true;
+  bool saving = false;
   List<AiConfigHistory> history = const [];
   int? selectedHistory;
   EndpointTestResult? endpointTest;
@@ -488,10 +489,6 @@ class _ConfigPageState extends State<_ConfigPage> {
   }
   Future<void> _save() async {
     final url = baseUrl.text.trim();
-    if (_needsLlmValidation && !_connectionReady) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先测试接口并完成测试请求，再保存 AI 配置')));
-      return;
-    }
     if (url.isNotEmpty) {
       final parsed = Uri.tryParse(url);
       if (parsed == null || (parsed.scheme != 'http' && parsed.scheme != 'https') || parsed.host.isEmpty) {
@@ -499,18 +496,25 @@ class _ConfigPageState extends State<_ConfigPage> {
         return;
       }
     }
-    final enteredSecret = _credentialValue(secret);
-    final enteredApiKey = _credentialValue(apiKey);
-    await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: thinkingLevel, appId: appId.text.trim(), secret: enteredSecret, apiKey: enteredApiKey);
-    final nextHistory = await widget.bridge.configHistory();
-    if (secret.text.isNotEmpty) secret.text = _savedMask;
-    if (apiKey.text.isNotEmpty) apiKey.text = _savedMask;
-    qqConfigured = qqConfigured || enteredSecret.isNotEmpty;
-    llmConfigured = llmConfigured || enteredApiKey.isNotEmpty;
-    savedProtocol = protocol.text.trim(); savedModel = model.text.trim(); savedBaseUrl = baseUrl.text.trim(); savedAppId = appId.text.trim(); savedThinkingLevel = thinkingLevel;
-    if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
-    widget.onSaved?.call();
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
+    setState(() => saving = true);
+    try {
+      final enteredSecret = _credentialValue(secret);
+      final enteredApiKey = _credentialValue(apiKey);
+      await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: thinkingLevel, appId: appId.text.trim(), secret: enteredSecret, apiKey: enteredApiKey);
+      final nextHistory = await widget.bridge.configHistory();
+      if (secret.text.isNotEmpty) secret.text = _savedMask;
+      if (apiKey.text.isNotEmpty) apiKey.text = _savedMask;
+      qqConfigured = qqConfigured || enteredSecret.isNotEmpty;
+      llmConfigured = llmConfigured || enteredApiKey.isNotEmpty;
+      savedProtocol = protocol.text.trim(); savedModel = model.text.trim(); savedBaseUrl = baseUrl.text.trim(); savedAppId = appId.text.trim(); savedThinkingLevel = thinkingLevel;
+      if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
+      widget.onSaved?.call();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$error')));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
   }
 
   Future<void> _testEndpoint() async {
@@ -537,8 +541,13 @@ class _ConfigPageState extends State<_ConfigPage> {
   }
 
   Future<void> _testQq() async {
-    setState(() => testingQq = true);
-    final result = await widget.bridge.testQqConnection();
+    setState(() { testingQq = true; qqTest = null; });
+    Map<String, Object?> result;
+    try {
+      result = await widget.bridge.testQqConnection(appId: appId.text.trim(), secret: _credentialValue(secret));
+    } catch (error) {
+      result = {'ok': false, 'stage': '测试', 'message': '$error'};
+    }
     if (mounted) setState(() { testingQq = false; qqTest = result; });
   }
   Future<void> _copyEndpointDiagnostic() async {
@@ -597,7 +606,7 @@ class _ConfigPageState extends State<_ConfigPage> {
       FilledButton.tonalIcon(onPressed: testingRequest || model.text.trim().isEmpty ? null : _testRequest, icon: testingRequest ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline), label: const Text('测试请求（发送一条 ping）')),
       if (requestTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${requestTest!.ok ? '✓' : '✕'} ${requestTest!.stage}：${requestTest!.message}${requestTest!.statusCode == null ? '' : '（HTTP ${requestTest!.statusCode}）'}${requestTest!.elapsedMs == null ? '' : ' · ${requestTest!.elapsedMs} ms'}', style: TextStyle(color: requestTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
       const SizedBox(height: 14),
-      Text(_connectionReady ? '✓ AI 接口认证和测试请求均通过，可以保存配置。' : '保存 AI 配置前，请先测试接口并发送测试请求；失败不会覆盖旧配置。', style: TextStyle(color: _connectionReady ? AppThemeTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant)),
+      Text(_connectionReady ? '✓ AI 接口认证和测试请求均通过。' : '可以先保存配置，之后再测试；测试失败不会覆盖已保存的配置。', style: TextStyle(color: _connectionReady ? AppThemeTokens.of(context).success : Theme.of(context).colorScheme.onSurfaceVariant)),
       const SizedBox(height: 6),
       Row(children: [Expanded(child: Text(_hasUnsavedChanges ? '当前页面有未保存修改' : '当前内容与已保存配置一致', style: TextStyle(color: _hasUnsavedChanges ? AppThemeTokens.of(context).warning : Theme.of(context).colorScheme.onSurfaceVariant))), if (_hasUnsavedChanges) TextButton.icon(onPressed: loading ? null : _restoreSavedConfig, icon: const Icon(Icons.undo), label: const Text('恢复已保存'))]),
       const SizedBox(height: 8),
@@ -607,8 +616,9 @@ class _ConfigPageState extends State<_ConfigPage> {
       _field(appId, 'QQ 官方机器人 AppID', '留空表示未配置', onChanged: (_) => setState(() {})),
       _credentialField(secret, 'QQ AppSecret', qqConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() {})),
       FilledButton.tonalIcon(onPressed: loading || testingQq ? null : _testQq, icon: testingQq ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.link), label: const Text('测试 QQ 连接')),
-      if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['configured'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['configured'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
-      SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: loading || (_needsLlmValidation && !_connectionReady) ? null : _save, icon: const Icon(Icons.save), label: const Text('保存配置'))),
+      if (qqTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${qqTest!['ok'] == true ? '✓' : '✕'} ${qqTest!['stage'] ?? ''}：${qqTest!['message'] ?? ''}${qqTest!['statusCode'] == null ? '' : '（HTTP ${qqTest!['statusCode']}）'}${qqTest!['elapsedMs'] == null ? '' : ' · ${qqTest!['elapsedMs']} ms'}', style: TextStyle(color: qqTest!['ok'] == true ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
+      SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: !loading && !saving && !testingEndpoint && !testingRequest && !testingQq ? _save : null, icon: const Icon(Icons.save), label: Text(saving ? '正在保存…' : '保存配置'))),
+      if (!_connectionReady && _needsLlmValidation) Padding(padding: const EdgeInsets.only(top: 8), child: Text('提示：未通过「测试接口 + 测试请求」也可以直接保存；测试失败不会覆盖已保存的配置。', style: TextStyle(fontSize: 12, color: AppThemeTokens.of(context).warning))),
       if (history.isNotEmpty) Center(child: TextButton.icon(onPressed: _clearHistory, icon: const Icon(Icons.delete_outline), label: const Text('清除历史配置'))),
     ],
   );
