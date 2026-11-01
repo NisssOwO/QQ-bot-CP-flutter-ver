@@ -3,8 +3,8 @@
   "versionCode": 1,
   "abi": "arm64-v8a",
   "minSdk": 24,
-  "sizeBytes": 176960301,
-  "sha256": "84ac20bea9a2c7bc092c562647c2f1dbe3a25e8daf472b3a8947daac0b5f8647",
-  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.1.0/QQ-bot-CP-arm64-v0.1.0.apk",
-  "releaseNotes": "QQ-bot-CP Flutter 版 Android 16 arm64 Release；支持应用内检查、下载、校验和安装更新。"
+  "sizeBytes": 176421317,
+  "sha256": "0510d704117be533ea4ff6a1194edd642298633338e8d17ea54137da94430c9c",
+  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.1.0/QQ-bot-CP-v0.1.0-arm64.apk",
+  "releaseNotes": "QQ-bot-CP Flutter 版 Android 16 arm64 Release；修复 Android 10+ 无法从应用目录执行 node 导致的启动失败，支持应用内检查、下载、校验和安装更新。"
 }
