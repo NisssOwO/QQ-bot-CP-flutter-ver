@@ -44,7 +44,12 @@ class RuntimeBridge {
   /// service notification can be shown. Returns granted, denied, unavailable or superseded.
   Future<String> requestNotificationPermission() async => await _call<String>('requestNotificationPermission') ?? 'unavailable';
   Future<void> stop() async { await _call<void>('stopRuntime'); }
-  Future<void> restart() async { await _call<void>('restartRuntime', null, const Duration(seconds: 20)); }
+  /// Returns `{started, reason}`; `reason` is `preparing` while the first
+  /// extraction is still unpacking and the native side refused to interrupt it.
+  Future<Map<String, Object?>> restart() async {
+    final raw = await _call<Map<dynamic, dynamic>>('restartRuntime', null, const Duration(seconds: 20));
+    return raw?.map((key, value) => MapEntry('$key', value)) ?? <String, Object?>{};
+  }
 
   Future<RuntimeState> state() async {
     final raw = (await _call<Map<dynamic, dynamic>>('getRuntimeState', null, const Duration(seconds: 12), 2))?.map((key, value) => MapEntry('$key', value)) ?? <String, dynamic>{};

@@ -14,6 +14,8 @@ class RuntimeService : Service() {
         const val PREFS = "runtime"
         @Volatile var serviceAlive: Boolean = false
         const val ACTION_START = "com.shinycolors.officialbot.action.START_RUNTIME"
+        /** Restarts the run inside the live service instead of tearing the service down. */
+        const val ACTION_RESTART = "com.shinycolors.officialbot.action.RESTART_RUNTIME"
         const val EXTRA_SOURCE = "source"
         const val CODE_START_FAILED = "runtime_start_failed"
         /** Guards every persisted stage so state, log, widget and notification agree. */
@@ -36,12 +38,12 @@ class RuntimeService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val source = intent?.getStringExtra(EXTRA_SOURCE) ?: "system"
+        // Restart must reach the live coordinator: stopping the service and starting it again
+        // would land on this same instance, look like a duplicate start and be ignored.
+        val restart = intent?.action == ACTION_RESTART
         val firstCommand = !started
         started = true
-        when (intent?.action) {
-            ACTION_START -> if (firstCommand) coordinator?.start(source)
-            else -> if (firstCommand) coordinator?.start(source)
-        }
+        if (restart || firstCommand) coordinator?.start(source)
         return START_STICKY
     }
 
