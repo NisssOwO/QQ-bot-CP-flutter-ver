@@ -9,7 +9,6 @@ import '../models/runtime_state.dart';
 import '../models/role_card.dart';
 import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
-import '../services/public_ip_service.dart';
 import '../services/startup_stats.dart';
 import '../services/background_tasks.dart';
 import '../models/update_manifest.dart';
@@ -37,11 +36,6 @@ class _HomeShellState extends State<HomeShell> {
   RuntimeState _state = const RuntimeState();
   PublicConfig _publicConfig = const PublicConfig();
   int _index = 0;
-  String _publicIp = '未检测';
-  String _publicIpv6 = '未检测';
-  String _ipCheckedAt = '';
-  bool _ipLoading = false;
-  bool _hidePublicIp = false;
   Map<String, String> _sessionRoles = const {};
 
   @override
@@ -65,7 +59,6 @@ class _HomeShellState extends State<HomeShell> {
     _refreshState();
     _refreshConfig();
     _refreshSessionRoles();
-    _refreshPublicIp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartRuntime());
     _startStateWatchdog();
   }
@@ -194,38 +187,11 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  Future<void> _refreshPublicIp() async {
-    if (_ipLoading) return;
-    final timer = Stopwatch()..start();
-    setState(() => _ipLoading = true);
-    final result = await const PublicIpService().lookup();
-    timer.stop();
-    if (!mounted) return;
-    setState(() {
-      _ipLoading = false;
-      _publicIp = result.ipv4 ?? '无法获取';
-      _publicIpv6 = result.ipv6 ?? '无法获取';
-      _ipCheckedAt = '${result.checkedAt.hour.toString().padLeft(2, '0')}:${result.checkedAt.minute.toString().padLeft(2, '0')}';
-      _logs.add(RuntimeLogEntry(
-        time: result.checkedAt,
-        level: result.error == null ? LogLevel.info : LogLevel.warn,
-        module: 'public-ip',
-        message: result.error == null ? '公网 IP 查询完成（${timer.elapsedMilliseconds} ms）' : '公网 IP 查询失败（${timer.elapsedMilliseconds} ms）：${result.error}',
-      ));
-    });
-  }
-
-  void _copyPublicIp(String value) {
-    if (value == '未检测' || value == '无法获取') return;
-    Clipboard.setData(ClipboardData(text: value));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('公网 IP 已复制')));
-  }
-
   @override
   Widget build(BuildContext context) {
     final startupStats = summarizeStartup(_logs);
     final pages = <Widget>[
-      _OverviewPage(state: _state, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, checkedAt: _ipCheckedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
+      _OverviewPage(state: _state, startupStats: startupStats, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs),
       _RolePage(bridge: _bridge),
@@ -251,19 +217,11 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.checkedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
+  const _OverviewPage({required this.state, required this.startupStats, required this.qqConfigured, required this.llmConfigured, required this.onOpenAi, required this.onRestart});
   final RuntimeState state;
   final StartupStats startupStats;
-  final String publicIp;
-  final String publicIpv6;
-  final String checkedAt;
-  final bool loadingIp;
-  final bool hideIp;
   final bool qqConfigured;
   final bool llmConfigured;
-  final VoidCallback onRefreshIp;
-  final ValueChanged<String> onCopyIp;
-  final VoidCallback onToggleHideIp;
   final VoidCallback onOpenAi;
   final VoidCallback onRestart;
 
@@ -293,18 +251,10 @@ class _OverviewPage extends StatelessWidget {
           if (state.aiFailureCount > 0) Chip(label: Text('AI 失败 ${state.aiFailureCount} 次')),
         ]))),
         Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [const Expanded(child: Text('设备公网 IP', style: TextStyle(fontWeight: FontWeight.bold))), IconButton(tooltip: hideIp ? '显示 IP' : '隐藏 IP', onPressed: onToggleHideIp, icon: Icon(hideIp ? Icons.visibility_off : Icons.visibility)), loadingIp ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : IconButton(tooltip: '刷新', onPressed: onRefreshIp, icon: const Icon(Icons.refresh))]),
-          _IpLine(label: 'IPv4', value: publicIp, hidden: hideIp, onCopy: onCopyIp),
-          _IpLine(label: 'IPv6', value: publicIpv6, hidden: hideIp, onCopy: onCopyIp),
-          if (checkedAt.isNotEmpty) Text('检测时间：$checkedAt', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Text('公网 IP 可能变化，不能作为设备永久标识。', style: Theme.of(context).textTheme.bodySmall),
-        ]))),
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('聊天指令', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
           const Text('点击右侧按钮可逐条复制到 QQ。'),
-          for (final command in const ['/preset <角色ID>', '/presets', '/new']) _CommandCopyRow(command: command),
+          for (final command in _chatCommands) _CommandCopyRow(command: command.$1, description: command.$2),
         ]))),
       ]);
 
@@ -369,25 +319,32 @@ class _OverviewPage extends StatelessWidget {
   }
 }
 
-class _IpLine extends StatelessWidget {
-  const _IpLine({required this.label, required this.value, required this.hidden, required this.onCopy});
-  final String label;
-  final String value;
-  final bool hidden;
-  final ValueChanged<String> onCopy;
+class _CommandCopyRow extends StatelessWidget {
+  const _CommandCopyRow({required this.command, required this.description});
+  final String command;
+  final String description;
   @override
-  Widget build(BuildContext context) {
-    final shown = hidden && value != '未检测' && value != '无法获取' ? '••••••••' : value;
-    return Row(children: [SizedBox(width: 48, child: Text('$label：')), Expanded(child: Text(shown)), if (!hidden && value != '未检测' && value != '无法获取') IconButton(tooltip: '复制 $label', onPressed: () => onCopy(value), icon: const Icon(Icons.copy, size: 18))]);
-  }
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(top: 6), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(command, style: const TextStyle(fontFamily: 'monospace')),
+      Text(description, style: Theme.of(context).textTheme.bodySmall),
+    ])),
+    IconButton(tooltip: '复制 $command', onPressed: () async { await Clipboard.setData(ClipboardData(text: command)); if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已复制 $command'))); }, icon: const Icon(Icons.copy, size: 18)),
+  ]));
 }
 
-class _CommandCopyRow extends StatelessWidget {
-  const _CommandCopyRow({required this.command});
-  final String command;
-  @override
-  Widget build(BuildContext context) => Row(children: [Expanded(child: Text(command, style: const TextStyle(fontFamily: 'monospace'))), IconButton(tooltip: '复制 $command', onPressed: () async { await Clipboard.setData(ClipboardData(text: command)); if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已复制 $command'))); }, icon: const Icon(Icons.copy, size: 18))]);
-}
+/// QQ 侧可用的聊天指令，说明取自 dsh-qqbot 的指令注册表（name + description）。
+const List<(String, String)> _chatCommands = [
+  ('/new', '开一个新会话，清空当前聊天上下文（也可用 /reset、/clear）'),
+  ('/compact', '把旧对话压缩成摘要，保留上下文又节省 token'),
+  ('/preset', '不带参数时列出所有角色卡 ID'),
+  ('/preset <角色ID>', '切换这个会话使用的角色卡，下一条消息生效'),
+  ('/model', '查看当前模型；加 /provider/model 可切换模型'),
+  ('/bot-status', '查看当前会话状态：模型、角色卡和上下文'),
+  ('/bot-ping', '测一下机器人到 QQ 的连接延迟'),
+  ('/bot-help', '列出全部可用指令'),
+  ('/stop', '中止正在生成的回复'),
+];
 
 class _LogPage extends StatefulWidget {
   const _LogPage({required this.logs});
