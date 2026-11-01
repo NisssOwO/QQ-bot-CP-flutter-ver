@@ -75,12 +75,10 @@ class RuntimeProcessController(private val context: Context) {
     }
 
     /**
-     * Node runs from the APK's native library directory, which Android always mounts
-     * executable. The bundled copy is staged only when the native one is missing.
+     * Node runs from one app-owned copy under code_cache. The bundled binary is staged
+     * there because Android mounts app data and code_cache executable for this process.
      */
     private fun resolveNode(root: File): File {
-        val native = File(context.applicationInfo.nativeLibraryDir, "libnode.so")
-        if (native.isFile) return native
         val bundled = File(root, "bin/node")
         require(bundled.isFile) { "Runtime bundle is incomplete" }
         return stageExecutable(bundled)
@@ -119,18 +117,28 @@ class RuntimeProcessController(private val context: Context) {
         return env
     }
 
+    /**
+     * Reads one child stream until it closes.
+     *
+     * [stop] closes this stream from another thread, which surfaces as
+     * InterruptedIOException; an uncaught exception there kills the whole app
+     * process, so every read error ends this thread quietly instead.
+     */
     private fun drain(stream: java.io.InputStream, source: String) {
-        stream.bufferedReader().useLines { lines ->
-            var captured = 0
-            lines.forEach { line ->
-                if (booted.count > 0) booted.countDown()
-                val parsed = RuntimeLogParser.parse(line, source)
-                recorder.stream(parsed.level, parsed.module, line, parsed.qq, parsed.ai, parsed.network, parsed.errorCode)
-                if (source == "stderr" && captured < 20 && line.isNotBlank()) {
-                    captured++
-                    stderrSample.add(line.take(240))
+        try {
+            stream.bufferedReader().useLines { lines ->
+                var captured = 0
+                for (line in lines) {
+                    if (booted.count > 0) booted.countDown()
+                    val parsed = RuntimeLogParser.parse(line, source)
+                    recorder.stream(parsed.level, parsed.module, line, parsed.qq, parsed.ai, parsed.network, parsed.errorCode)
+                    if (source == "stderr" && captured < 20 && line.isNotBlank()) {
+                        captured++
+                        stderrSample.add(line.take(240))
+                    }
                 }
             }
+        } catch (_: Exception) {
         }
     }
 

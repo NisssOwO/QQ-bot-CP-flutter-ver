@@ -5,9 +5,15 @@ import java.io.File
 import java.io.FileOutputStream
 
 object RuntimeAssetInstaller {
-    private const val VERSION = "node26-bundle-v43"
+    private const val VERSION = "node26-bundle-v44"
 
-    fun install(context: Context): File {
+    class IncompleteBundleException(message: String) : Exception(message)
+
+    /**
+     * Extracts the bundled runtime on first use. [onCopied] receives a running count of
+     * files copied so a slow first extraction can report progress instead of looking frozen.
+     */
+    fun install(context: Context, onCopied: (Int) -> Unit = {}): File {
         val target = File(context.filesDir, "runtime")
         val prefs = context.getSharedPreferences(RuntimeService.PREFS, Context.MODE_PRIVATE)
         val ready = prefs.getString("assetVersion", null) == VERSION &&
@@ -19,9 +25,17 @@ object RuntimeAssetInstaller {
             refreshOpenAiParser(context, target)
             refreshTurnErrorNormalizer(context, target)
             refreshAndroidRuntimeOverrides(context, target)
+            verifyBundle(target, prefs.getString("assetVersion", null) != VERSION)
             return target
         }
-        copyTree(context, "runtime", target)
+        // An interrupted extraction leaves half-written files behind. copyFile() skips files
+        // that already have content, so a stale tree must be removed before copying again.
+        target.deleteRecursively()
+        val counter = intArrayOf(0)
+        copyTree(context, "runtime", target) {
+            counter[0]++
+            onCopied(counter[0])
+        }
         refreshEntry(context, target)
         refreshProfile(context, target)
         refreshPiAiManifest(context, target)
@@ -29,8 +43,32 @@ object RuntimeAssetInstaller {
         refreshTurnErrorNormalizer(context, target)
         refreshAndroidRuntimeOverrides(context, target)
         File(target, "bin/node").setExecutable(true, false)
+        verifyBundle(target, true)
         prefs.edit().putString("assetVersion", VERSION).apply()
         return target
+    }
+
+    /**
+     * Fails the start with a readable reason instead of letting Node report a module error
+     * after a partial or outdated extraction.
+     */
+    private fun verifyBundle(target: File, fresh: Boolean) {
+        val required = listOf(
+            "bin/node",
+            "runtime-entry.mjs",
+            "node_modules/@tencent-connect/dsh-qqbot/package.json",
+            "node_modules/@tencent-connect/qqbot-nodejs/package.json",
+            "node_modules/@deepseek-ai/dsh-app-boot/package.json",
+            "node_modules/@earendil-works/pi-ai/package.json",
+        )
+        val missing = required.filter { !File(target, it).isFile }
+        if (missing.isNotEmpty()) {
+            throw IncompleteBundleException("Runtime 运行文件不完整，缺少：${missing.joinToString("、")}")
+        }
+        if (fresh) {
+            val node = File(target, "bin/node")
+            if (node.length() < 1_000_000) throw IncompleteBundleException("Runtime 的 Node 可执行文件解包不完整（字节数 ${node.length()}）")
+        }
     }
 
     /** The entry script is a handful of bytes and carries the startup handshake, so always refresh it. */
@@ -137,14 +175,15 @@ object RuntimeAssetInstaller {
     private fun hasAssets(context: Context, assetPath: String): Boolean =
         !context.assets.list(assetPath).isNullOrEmpty()
 
-    private fun copyTree(context: Context, assetPath: String, target: File) {
+    private fun copyTree(context: Context, assetPath: String, target: File, onFile: () -> Unit = {}) {
         val children = context.assets.list(assetPath) ?: emptyArray()
         if (children.isEmpty()) {
             copyFile(context, assetPath, target)
+            onFile()
             return
         }
         if (!target.exists()) target.mkdirs()
-        children.forEach { child -> copyTree(context, "$assetPath/$child", File(target, child)) }
+        children.forEach { child -> copyTree(context, "$assetPath/$child", File(target, child), onFile) }
     }
 
     private fun copyFile(context: Context, assetPath: String, target: File) {

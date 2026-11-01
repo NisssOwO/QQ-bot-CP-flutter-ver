@@ -18,6 +18,7 @@ class RuntimeState {
     this.aiFailureCount = 0,
     this.processAlive = false,
     this.userStopped = false,
+    this.stageAt = 0,
   });
 
   final RuntimeStatus status;
@@ -36,6 +37,9 @@ class RuntimeState {
   final bool processAlive;
   final bool userStopped;
 
+  /// Wall-clock time (ms) of the latest stage write; 0 when unknown.
+  final int stageAt;
+
   RuntimeState copyWith({
     RuntimeStatus? status,
     String? phase,
@@ -52,6 +56,7 @@ class RuntimeState {
     int? aiFailureCount,
     bool? processAlive,
     bool? userStopped,
+    int? stageAt,
   }) => RuntimeState(
         status: status ?? this.status,
         phase: phase ?? this.phase,
@@ -68,6 +73,7 @@ class RuntimeState {
         aiFailureCount: aiFailureCount ?? this.aiFailureCount,
         processAlive: processAlive ?? this.processAlive,
         userStopped: userStopped ?? this.userStopped,
+        stageAt: stageAt ?? this.stageAt,
       );
 }
 

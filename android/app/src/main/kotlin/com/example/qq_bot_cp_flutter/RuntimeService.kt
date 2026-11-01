@@ -31,7 +31,6 @@ class RuntimeService : Service() {
         coordinator = RuntimeCoordinator(this) { RuntimeProcessController(this) }
         val notifier = RuntimeNotifier(this)
         startForeground(RuntimeNotifier.ID, notifier.build("正在启动 Runtime"))
-        RuntimeLogRecorder(this).record(RuntimeLogRecorder.Status.STARTING, "准备启动", "正在初始化 Android Runtime", 0)
         registerNetworkCallback()
     }
 
@@ -40,7 +39,7 @@ class RuntimeService : Service() {
         val firstCommand = !started
         started = true
         when (intent?.action) {
-            ACTION_START -> coordinator?.start(source)
+            ACTION_START -> if (firstCommand) coordinator?.start(source)
             else -> if (firstCommand) coordinator?.start(source)
         }
         return START_STICKY

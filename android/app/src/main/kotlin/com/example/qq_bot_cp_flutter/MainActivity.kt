@@ -51,7 +51,20 @@ class MainActivity : FlutterActivity() {
                 "startRuntime" -> { startRuntimeService(); result.success(null) }
                 "requestNotificationPermission" -> requestNotificationPermission(result)
                 "stopRuntime" -> { markRuntimeStopping("用户请求停止 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", true).apply(); stopService(Intent(this, RuntimeService::class.java)); result.success(null) }
-                "restartRuntime" -> { markRuntimeStopping("准备重启 Runtime"); getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply(); stopService(Intent(this, RuntimeService::class.java)); launchRuntime("user"); result.success(null) }
+                "restartRuntime" -> {
+                    // A start request while the service is already alive would restart it and
+                    // abort the run in flight (including a slow first asset extraction), so
+                    // treat it as idempotent and let the running start finish.
+                    getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("userStopped", false).apply()
+                    if (RuntimeService.serviceAlive) {
+                        result.success(mapOf("started" to false, "alreadyRunning" to true))
+                    } else {
+                        markRuntimeStopping("准备重启 Runtime")
+                        stopService(Intent(this, RuntimeService::class.java))
+                        launchRuntime("user")
+                        result.success(mapOf("started" to true, "alreadyRunning" to false))
+                    }
+                }
                 "getRuntimeState" -> result.success(runtimeState())
                 "getSessionRoleStatus" -> result.success(sessionRoleStatus())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
@@ -115,6 +128,7 @@ class MainActivity : FlutterActivity() {
             "aiFailureCount" to prefs.getInt("aiFailureCount", 0),
             "processAlive" to processAlive,
             "userStopped" to prefs.getBoolean("userStopped", false),
+            "stageAt" to prefs.getLong("stageAt", 0L),
         )
     }
 
