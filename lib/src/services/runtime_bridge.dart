@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import '../models/endpoint_test_result.dart';
+import '../models/gateway_status.dart';
 import '../models/public_config.dart';
 import '../models/runtime_log.dart';
 import '../models/runtime_state.dart';
 import '../models/role_card.dart';
+import '../models/proactive_reply.dart';
 
 class RuntimeBridge {
   static const _methods = MethodChannel('qq_bot_cp/runtime');
@@ -80,6 +82,37 @@ class RuntimeBridge {
     );
   }
 
+  /// QQ 网关真实连接状态：由 Node 侧 SDK 事件落盘，进程活着不代表在线。
+  Future<GatewayStatus> gatewayStatus() async => GatewayStatus.fromMap(
+        (await _call<Map<dynamic, dynamic>>('getGatewayStatus', null, const Duration(seconds: 8), 1)) ?? const <dynamic, dynamic>{},
+      );
+
+  Future<ProactiveReplyConfig> proactiveReplyConfig() async {
+    final raw = await _call<Map<dynamic, dynamic>>('getProactiveReplyConfig', null, const Duration(seconds: 12), 1);
+    return ProactiveReplyConfig.fromJson(raw ?? const {});
+  }
+
+  Future<void> saveProactiveReplyConfig(ProactiveReplyConfig config) async {
+    await _call<void>('saveProactiveReplyConfig', config.toJson(), const Duration(seconds: 12), 1);
+  }
+
+  Future<ProactiveReplyRuntimeStatus> proactiveReplyStatus() async {
+    final raw = await _call<Map<dynamic, dynamic>>('getProactiveReplyStatus', null, const Duration(seconds: 12), 1);
+    return ProactiveReplyRuntimeStatus.fromJson(raw ?? const {});
+  }
+
+  /// 请 Node 立刻在该群试发一条（跳过概率/冷却/次数）。返回请求 id，结果写在状态文件 lastTestId/lastTestResult。
+  Future<String> testProactiveReply(String groupId) async =>
+      await _call<String>('testProactiveReply', {'group': groupId}, const Duration(seconds: 12), 1) ?? '';
+
+  /// 各会话用 /preset 切换过的角色卡（key 为会话，如 `group:xxx`；value 为角色卡 id）。
+  Future<Map<String, String>> sessionPresetOverrides() async =>
+      ((await _call<Map<dynamic, dynamic>>('getSessionPresetOverrides', null, const Duration(seconds: 12), 1)) ?? {})
+          .map((key, value) => MapEntry('$key', '$value'));
+
+  /// 清除所有会话的 /preset 覆盖，并重启 Runtime 让全部会话回到默认角色卡。
+  Future<void> clearSessionPresetOverrides() =>
+      _call<void>('clearSessionPresetOverrides', null, const Duration(seconds: 20), 1);
   Future<PublicConfig> config() async {
     final raw = (await _call<Map<dynamic, dynamic>>('getPublicConfig', null, const Duration(seconds: 12), 2))?.map((key, value) => MapEntry('$key', value)) ?? <String, dynamic>{};
     return PublicConfig(

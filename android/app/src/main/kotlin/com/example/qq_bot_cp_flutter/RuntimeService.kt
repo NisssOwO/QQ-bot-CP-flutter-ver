@@ -96,6 +96,8 @@ class RuntimeService : Service() {
                 "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
                 "LLM_THINKING_LEVEL" to config.getString("thinkingLevel", "medium").orEmpty(),
                 "LLM_PRESET" to defaultRole,
+                // Node 子进程默认按 UTC 计时；主动回复的安静时段和每日计数需要设备时区。
+                "TZ" to java.util.TimeZone.getDefault().id,
             )
         }
     }

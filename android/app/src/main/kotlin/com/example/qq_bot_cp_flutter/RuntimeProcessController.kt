@@ -117,6 +117,7 @@ class RuntimeProcessController(private val context: Context) {
         env["LC_ALL"] = "en_US.UTF-8"
         env.putAll(extra)
         env["SHINY_RUNTIME_ROOT"] = root.absolutePath
+        env["SHINY_APP_FILES_DIR"] = context.filesDir.absolutePath
         env["SHINY_NODE_BIN"] = node.absolutePath
         env["LD_LIBRARY_PATH"] = "${File(root, "bin").absolutePath}:${context.applicationInfo.nativeLibraryDir}"
         return env

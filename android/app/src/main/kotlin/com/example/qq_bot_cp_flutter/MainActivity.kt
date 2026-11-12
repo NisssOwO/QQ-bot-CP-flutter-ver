@@ -75,10 +75,17 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "getRuntimeState" -> result.success(runtimeState())
+                "getGatewayStatus" -> result.success(readGatewayStatus())
                 "getSessionRoleStatus" -> result.success(sessionRoleStatus())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "clearRuntimeLogs" -> result.success(clearRuntimeLogs())
                 "getPublicConfig" -> result.success(publicConfig())
+                 "getProactiveReplyConfig" -> result.success(readProactiveReplyConfig())
+                 "getProactiveReplyStatus" -> result.success(readProactiveReplyStatus())
+                 "testProactiveReply" -> try { result.success(requestProactiveReplyTest("${(call.arguments as? Map<*, *>)?.get("group") ?: ""}".trim())) } catch (error: Exception) { result.error("PROACTIVE_TEST", error.message, null) }
+                 "getSessionPresetOverrides" -> result.success(sessionPresetOverrides())
+                 "clearSessionPresetOverrides" -> try { val error = clearSessionPresetOverrides(); if (error == null) result.success(null) else result.error("RESTART", error, null) } catch (error: Exception) { result.error("PRESET_CLEAR", error.message, null) }
+                 "saveProactiveReplyConfig" -> try { saveProactiveReplyConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) } catch (error: Exception) { result.error("PROACTIVE_CONFIG", error.message, null) }
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "fetchModels" -> fetchModels(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "testLlmConnection" -> testLlmConnection(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
@@ -219,6 +226,54 @@ class MainActivity : FlutterActivity() {
         startActivity(intent)
     }
 
+    private fun proactiveReplyFile(): File = File(filesDir, ".dsh-qqbot/proactive-reply.json")
+
+    private fun defaultProactiveReply(): JSONObject = JSONObject().put("schemaVersion", 1).put("global", JSONObject().put("enabled", false).put("probability", 5).put("minMessages", 3).put("cooldownSeconds", 300).put("dailyLimitPerGroup", 20).put("historyMessages", 12).put("minTextLength", 2).put("maxTextLength", 500).put("requireRecentActivitySeconds", 900).put("quietHoursEnabled", true).put("quietStart", "23:00").put("quietEnd", "08:00")).put("groups", JSONObject())
+
+    private fun proactiveReplyStatusFile(): File = File(filesDir, ".dsh-qqbot/proactive-reply-state.json")
+
+    private fun readProactiveReplyStatus(): Map<String, Any?> {
+        val file = proactiveReplyStatusFile()
+        val json = try { if (file.isFile) JSONObject(file.readText(Charsets.UTF_8)) else null } catch (_: Exception) { null }
+        return if (json?.optJSONObject("groups") != null) jsonToMap(json) else mapOf("schemaVersion" to 1, "groups" to emptyMap<String, Any?>())
+    }
+
+    private fun gatewayStatusFile(): File = File(filesDir, ".dsh-qqbot/gateway-status.json")
+
+    /**
+     * 网关真实连接状态。由 Node 侧 SDK 事件（ready / disconnected / start 失败）写入，
+     * 每 20 秒心跳一次；文件不存在说明 Runtime 还没跑到网关阶段，不能当成"在线"。
+     */
+    private fun readGatewayStatus(): Map<String, Any?> {
+        val file = gatewayStatusFile()
+        val json = try { if (file.isFile) JSONObject(file.readText(Charsets.UTF_8)) else null } catch (_: Exception) { null }
+        return if (json != null) jsonToMap(json) else mapOf("schemaVersion" to 1, "state" to "unknown", "updatedAt" to 0L)
+    }
+
+    private fun readProactiveReplyConfig(): Map<String, Any?> {
+        val file = proactiveReplyFile()
+        val json = try { if (file.isFile) JSONObject(file.readText(Charsets.UTF_8)) else defaultProactiveReply() } catch (_: Exception) { defaultProactiveReply() }
+        if (json.optInt("schemaVersion", 1) != 1 || !json.has("global") || !json.has("groups")) return jsonToMap(defaultProactiveReply())
+        return jsonToMap(json)
+    }
+
+    private fun saveProactiveReplyConfig(values: Map<*, *>) {
+        val json = JSONObject(values)
+        require(json.optInt("schemaVersion", 1) == 1) { "不支持的主动回复配置版本" }
+        require(json.optJSONObject("global") != null && json.optJSONObject("groups") != null) { "主动回复配置结构无效" }
+        val target = proactiveReplyFile(); target.parentFile?.mkdirs()
+        val temp = File(target.parentFile, ".${target.name}.tmp")
+        FileOutputStream(temp).use { it.write(json.toString().toByteArray(Charsets.UTF_8)); it.fd.sync() }
+        if (!temp.renameTo(target)) { temp.delete(); throw IllegalStateException("无法写入主动回复配置") }
+    }
+
+    private fun jsonToMap(json: JSONObject): Map<String, Any?> {
+        val map = linkedMapOf<String, Any?>()
+        val keys = json.keys()
+        while (keys.hasNext()) { val key = keys.next(); val value = json.get(key); map[key] = when (value) { is JSONObject -> jsonToMap(value); org.json.JSONObject.NULL -> null; else -> value } }
+        return map
+    }
+
     private fun publicConfig(): Map<String, Any?> {
         val config = getSharedPreferences("public-config", MODE_PRIVATE)
         val credentials = CredentialStore(this)
@@ -284,8 +339,50 @@ class MainActivity : FlutterActivity() {
         }.start()
     }
 
+    /** Node 的 prefs-store 写在 HOME(=filesDir)/.dsh-qqbot/model-prefs.json，/preset 覆盖在 presets 字段，键为 qqbot:<appId>:<group|c2c>:<peer>。 */
+    private fun modelPrefsFile(): File = File(filesDir, ".dsh-qqbot/model-prefs.json")
+
+    private fun sessionPresetOverrides(): Map<String, String> {
+        val presets = try { JSONObject(modelPrefsFile().readText(Charsets.UTF_8)).optJSONObject("presets") } catch (_: Exception) { null } ?: return emptyMap()
+        return buildMap {
+            for (key in presets.keys()) {
+                val id = presets.optString(key).takeIf { it.isNotBlank() } ?: continue
+                val parts = key.split(":")
+                val kind = when (parts.getOrNull(2)) { "group" -> "群"; "c2c" -> "私聊"; else -> parts.getOrNull(2) ?: "会话" }
+                val peer = parts.drop(3).joinToString(":").ifBlank { key }
+                put("$kind $peer", id)
+            }
+        }
+    }
+
+    /** 清空所有 /preset 覆盖后重启 Runtime；Node 内存里缓存了 prefs，不重启不会生效。 */
+    private fun clearSessionPresetOverrides(): String? {
+        val file = modelPrefsFile()
+        if (file.isFile) {
+            val json = try { JSONObject(file.readText(Charsets.UTF_8)) } catch (_: Exception) { JSONObject() }
+            json.put("presets", JSONObject())
+            val temp = File(file.parentFile, ".${file.name}.tmp")
+            FileOutputStream(temp).use { it.write(json.toString(2).toByteArray(Charsets.UTF_8)); it.fd.sync() }
+            if (!temp.renameTo(file)) { temp.delete(); throw IllegalStateException("无法写入会话角色设置") }
+        }
+        File(filesDir, ".dsh-qqbot/session-role-status.json").delete()
+        return if (RuntimeService.serviceAlive) RuntimeLauncher.restart(this, "user") else null
+    }
+
+    /** 写测试请求文件，Node 每 2 秒轮询一次；结果写回状态文件的 lastTestId/lastTestResult。 */
+    private fun requestProactiveReplyTest(group: String): String {
+        require(group.isNotBlank()) { "请先选择群" }
+        val id = System.currentTimeMillis().toString()
+        val target = File(filesDir, ".dsh-qqbot/proactive-reply-test.json"); target.parentFile?.mkdirs()
+        val temp = File(target.parentFile, ".${target.name}.tmp")
+        FileOutputStream(temp).use { it.write(JSONObject().put("id", id).put("group", group).toString().toByteArray(Charsets.UTF_8)); it.fd.sync() }
+        if (!temp.renameTo(target)) { temp.delete(); throw IllegalStateException("无法写入测试请求") }
+        return id
+    }
+
     private fun sessionRoleStatus(): Map<String, String> {
-        val file = File(filesDir, "runtime/.dsh-qqbot/session-role-status.json")
+        // prefs-store 把摘要写在 model-prefs.json 同目录（filesDir/.dsh-qqbot），不是 runtime 目录。
+        val file = File(filesDir, ".dsh-qqbot/session-role-status.json")
         if (!file.isFile) return emptyMap()
         return try {
             val json = JSONObject(file.readText())
@@ -505,12 +602,12 @@ class MainActivity : FlutterActivity() {
                 val promptFile = File(presets, file.name.removeSuffix(".json") + ".md")
                 val promptText = if (promptFile.isFile) promptFile.readText() else ""
                 val body = if (promptText.startsWith("---")) promptText.substringAfter("---\n", "").substringAfter("---\n", "") else promptText
-                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to body.trim(), "builtin" to metadata.optBoolean("builtin", !id.startsWith("custom.")))
+                result += mapOf("id" to id, "displayName" to metadata.optString("displayName", metadata.optString("name", id)), "prompt" to body.trim())
                 seenIds += id
             } catch (_: Exception) { }
         }
         val array = try { org.json.JSONArray(getSharedPreferences("role-cards", MODE_PRIVATE).getString("items", "[]") ?: "[]") } catch (_: Exception) { org.json.JSONArray() }
-        result += (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; val id = item.optString("id"); if (id.isBlank() || seenIds.contains(id)) return@mapNotNull null; mapOf("id" to id, "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt"), "builtin" to false) }
+        result += (0 until array.length()).mapNotNull { index -> val item = array.optJSONObject(index) ?: return@mapNotNull null; val id = item.optString("id"); if (id.isBlank() || seenIds.contains(id)) return@mapNotNull null; mapOf("id" to id, "displayName" to item.optString("displayName"), "prompt" to item.optString("prompt")) }
         return result
     }
 
@@ -572,7 +669,11 @@ class MainActivity : FlutterActivity() {
                 getSharedPreferences("default-role", MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences("public-config-history", MODE_PRIVATE).edit().clear().apply()
                 getSharedPreferences(RuntimeService.PREFS, MODE_PRIVATE).edit().putBoolean("credentialsConfigured", false).remove("runtimeLastOutput").remove("runtimeLastError").apply()
+                // role-cards 不清的话，下次打开角色页 ensureRuntimePresets 会把自定义卡写回来。
+                getSharedPreferences("role-cards", MODE_PRIVATE).edit().clear().apply()
                 removeCustomRuntimePresets()
+                proactiveReplyFile().delete()
+                proactiveReplyStatusFile().delete()
             }
         }
     }

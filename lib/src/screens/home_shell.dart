@@ -6,6 +6,7 @@ import '../models/runtime_log.dart';
 import '../models/public_config.dart';
 import '../models/endpoint_test_result.dart';
 import '../models/runtime_state.dart';
+import '../models/gateway_status.dart';
 import '../models/role_card.dart';
 import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
@@ -21,6 +22,7 @@ import '../theme/theme_controller.dart';
 import '../theme/theme_bridge.dart';
 import '../theme/app_theme_tokens.dart';
 import '../theme/app_theme.dart';
+import 'proactive_reply_page.dart' show ProactiveReplyPage;
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.onThemeChanged});
@@ -39,6 +41,7 @@ class _HomeShellState extends State<HomeShell> {
   bool _recovering = false;
   StreamSubscription<RuntimeLogEntry>? _subscription;
   RuntimeState _state = const RuntimeState();
+  GatewayStatus _gateway = const GatewayStatus();
   PublicConfig _publicConfig = const PublicConfig();
   int _index = 0;
   String _publicIp = '未检测';
@@ -83,6 +86,8 @@ class _HomeShellState extends State<HomeShell> {
     _watchdog?.cancel();
     _watchdog = Timer.periodic(const Duration(seconds: 5), (_) async {
       if (!mounted) return;
+      // 网关状态独立于启动阶段刷新：进程活着但连接掉了，这里才看得出来。
+      unawaited(_refreshGateway());
       final state = _state;
       if (state.status != RuntimeStatus.starting && state.status != RuntimeStatus.reconnecting) {
         _lastStageProgressAt = null;
@@ -159,6 +164,22 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _refreshConfig() async {
     try { final config = await _bridge.config(); if (mounted) setState(() => _publicConfig = config); } catch (_) {}
+  }
+
+  /// 拉取 QQ 网关真实状态；只在内容变化时重建，避免 5 秒一次无意义刷新。
+  Future<void> _refreshGateway() async {
+    try {
+      final gateway = await _bridge.gatewayStatus();
+      if (!mounted) return;
+      final changed = gateway.state != _gateway.state ||
+          gateway.updatedAt != _gateway.updatedAt ||
+          gateway.since != _gateway.since ||
+          gateway.code != _gateway.code ||
+          gateway.attempts != _gateway.attempts ||
+          gateway.error != _gateway.error ||
+          gateway.lastError != _gateway.lastError;
+      if (changed) setState(() => _gateway = gateway);
+    } catch (_) {}
   }
   Future<void> _refreshSessionRoles() async {
   }
@@ -250,11 +271,12 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final startupStats = summarizeStartup(_logs);
     final pages = <Widget>[
-      _OverviewPage(state: _state, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
+      _OverviewPage(state: _state, gateway: _gateway, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs, onClear: _clearLogs, bridge: _bridge),
       _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
+      ProactiveReplyPage(bridge: _bridge),
     ];
     // 手机上用底部导航，平板横过来后换成左侧导航加更宽的卡片。
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -341,8 +363,9 @@ Widget _twoColumns(List<Widget> children) {
 }
 
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.ipCheckedAt, required this.ipChangedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
+  const _OverviewPage({required this.state, required this.gateway, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.ipCheckedAt, required this.ipChangedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
   final RuntimeState state;
+  final GatewayStatus gateway;
   final StartupStats startupStats;
   final String publicIp;
   final String publicIpv6;
@@ -365,6 +388,8 @@ class _OverviewPage extends StatelessWidget {
     final ipv4Ready = publicIp != '未检测' && publicIp != '无法获取';
     return _pageBody(context, [
       _FullWidth(_statusHero(context)),
+      const SizedBox(height: 12),
+      _gatewayCard(context),
       if (state.status == RuntimeStatus.failed) ...[
         const SizedBox(height: 12),
         AppCard(
@@ -441,6 +466,84 @@ class _OverviewPage extends StatelessWidget {
         child: Column(children: [for (final command in _chatCommands) _CommandCopyRow(command: command.$1, description: command.$2)]),
       ),
     ]);
+  }
+
+  /// QQ 网关的真实连接状态。这是唯一能区分「进程还在」和「真的在线」的地方：
+/// 中间件注册失败、凭据被拒、SDK 放弃重连时，进程照常活着，但这里会变红。
+  Widget _gatewayCard(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    final theme = AppThemeTokens.of(context);
+    final now = DateTime.now();
+    final stale = gateway.heartbeatStale(now);
+    final kind = gateway.kind;
+    late final String title;
+    late final Color tone;
+    late final String detail;
+    if (kind == GatewayState.online && !stale) {
+      final connected = gateway.connectedFor(now);
+      title = '在线';
+      tone = tokens.heroEnd;
+      detail = '已连接 ${connected == null ? '—' : _formatDuration(connected.inMilliseconds)} · 心跳 ${_agoLabel(now, gateway.updated)}';
+    } else if (kind == GatewayState.online) {
+      title = '心跳超时';
+      tone = theme.warning;
+      detail = '最后一次心跳 ${_agoLabel(now, gateway.updated)}。进程可能还活着，但这条连接已经没人维护了，消息收不到。';
+    } else if (kind == GatewayState.connecting) {
+      title = '连接中';
+      tone = tokens.mutedText;
+      detail = '正在建立 QQ 网关长连接…';
+    } else if (kind == GatewayState.reconnecting) {
+      title = '重连中';
+      tone = theme.warning;
+      detail = '第 ${gateway.attempts} 次重连${_gatewayCodeText(gateway)}';
+    } else if (kind == GatewayState.offline) {
+      title = '已离线';
+      tone = theme.error;
+      detail = 'SDK 已放弃重连${_gatewayCodeText(gateway)}。需要检查 AppID/Secret 与开放平台的机器人状态，然后重启。';
+    } else if (kind == GatewayState.failed) {
+      title = '启动失败';
+      tone = theme.error;
+      detail = gateway.error.isEmpty ? 'bot.start() 失败，打开日志查看原因。' : 'bot.start() 失败：${gateway.error}';
+    } else {
+      title = '未启动';
+      tone = tokens.mutedText;
+      detail = '还没有网关状态。Runtime 未启动，或仍在初始化。';
+    }
+    final notes = <String>[
+      if (gateway.lastError.isNotEmpty) '最近错误：${gateway.lastError}',
+      if (gateway.error.isNotEmpty && kind != GatewayState.failed) '启动错误：${gateway.error}',
+      if (gateway.updated != null) '状态写入：${_agoLabel(now, gateway.updated)}',
+    ];
+    return AppCard(
+      title: 'QQ 网关连接',
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 9, height: 9, decoration: BoxDecoration(color: tone, shape: BoxShape.circle)),
+        const SizedBox(width: 7),
+        Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tone)),
+      ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(detail, style: TextStyle(fontSize: 13, height: 1.45, color: tokens.mutedText)),
+        for (final note in notes) Padding(padding: const EdgeInsets.only(top: 6), child: Text(note, style: TextStyle(fontSize: 12, color: tokens.mutedText))),
+      ]),
+    );
+  }
+
+  static String _gatewayCodeText(GatewayStatus status) {
+    final parts = <String>[
+      if (status.code != null) 'code ${status.code}',
+      if (status.reason.isNotEmpty) status.reason,
+    ];
+    return parts.isEmpty ? '' : '（${parts.join(' · ')}）';
+  }
+
+  static String _agoLabel(DateTime now, DateTime? at) {
+    if (at == null) return '未知';
+    final diff = now.difference(at);
+    if (diff.isNegative || diff.inSeconds < 5) return '刚刚';
+    if (diff.inSeconds < 60) return '${diff.inSeconds} 秒前';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} 分钟前';
+    if (diff.inHours < 24) return '${diff.inHours} 小时前';
+    return '${diff.inDays} 天前';
   }
 
   Widget _statusHero(BuildContext context) {
@@ -584,6 +687,7 @@ const List<(IconData, IconData, String)> _navItems = [
   (Icons.article_outlined, Icons.article, '日志'),
   (Icons.person_outline, Icons.person, '角色'),
   (Icons.settings_outlined, Icons.settings, '设置'),
+  (Icons.forum_outlined, Icons.forum, '主动回复'),
 ];
 
 /// 状态卡右上角的小胶囊按钮，避免悬浮按钮压住下面的卡片。
@@ -1322,12 +1426,33 @@ class _RolePageState extends State<_RolePage> {
   bool loading = true;
   bool editingExisting = false;
   String editingId = '';
-  bool get currentBuiltin => roles.any((role) => role.id == roleId.text.trim() && role.builtin);
+  Map<String, String> sessionOverrides = const {};
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() { super.initState(); _load(); _loadSessionOverrides(); }
   @override
   void dispose() { roleId.dispose(); roleName.dispose(); rolePrompt.dispose(); importJson.dispose(); super.dispose(); }
-  Future<void> _load() async { final values = await widget.bridge.roles(); final role = await widget.bridge.defaultRole(); if (mounted) setState(() { roles = values; defaultId = role['id'] ?? ''; defaultName = role['name'] ?? ''; roleId.text = role['id'] ?? ''; roleName.text = role['name'] ?? ''; rolePrompt.text = role['prompt'] ?? ''; loading = false; }); if (mounted && role['missing'] == 'true') ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('原默认角色已不存在，已回退为空角色；请重新设置默认角色。'))); }
+  Future<void> _load() async {
+    final values = await widget.bridge.roles();
+    final role = await widget.bridge.defaultRole();
+    final id = role['id'] ?? '';
+    RoleCard? stored;
+    for (final candidate in values) {
+      if (candidate.id == id) { stored = candidate; break; }
+    }
+    if (mounted) {
+      setState(() {
+        roles = values;
+        defaultId = id;
+        defaultName = role['name'] ?? '';
+        // 编辑框里放的是已保存的角色卡；editingId 必须同步，否则保存会被当成“ID 已存在”。
+        editingExisting = stored != null;
+        editingId = stored?.id ?? '';
+        roleId.text = stored?.id ?? '';
+        roleName.text = stored?.displayName ?? '';
+        rolePrompt.text = stored?.prompt ?? '';
+        loading = false;
+      });
+    } if (mounted && role['missing'] == 'true') ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('原默认角色已不存在，已回退为空角色；请重新设置默认角色。'))); }
   Widget _field(TextEditingController c, String label, String hint) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: TextField(
@@ -1337,9 +1462,47 @@ class _RolePageState extends State<_RolePage> {
         ),
       );
 
+  Future<void> _loadSessionOverrides() async {
+    try {
+      final value = await widget.bridge.sessionPresetOverrides();
+      if (mounted) setState(() => sessionOverrides = value);
+    } catch (_) {
+      // 只用于展示。
+    }
+  }
+  Future<void> _clearSessionOverrides() async {
+    final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('全部恢复默认角色？'), content: const Text('会清除所有会话用 /preset 设置的角色，并重启 Runtime（约十几秒内机器人不响应）。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('恢复并重启'))])) ?? false;
+    if (!ok || !mounted) return;
+    setState(() => loading = true);
+    try {
+      await widget.bridge.clearSessionPresetOverrides();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已恢复默认角色，Runtime 正在重启')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('恢复失败：$e')));
+    } finally {
+      if (mounted) setState(() => loading = false);
+      await _loadSessionOverrides();
+    }
+  }
   void _newRole() { setState(() { editingExisting = false; editingId = ''; roleId.clear(); roleName.clear(); rolePrompt.clear(); }); }
   void _edit(RoleCard role) { setState(() { editingExisting = true; editingId = role.id; roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); }
-  Future<void> _save() async {
+  RoleCard? _stored(String id) {
+    for (final candidate in roles) {
+      if (candidate.id == id) return candidate;
+    }
+    return null;
+  }
+  Future<bool> _confirmOverwrite(RoleCard role) async {
+    final existing = _stored(role.id);
+    if (existing == null || (existing.prompt == role.prompt && existing.displayName == role.displayName)) return true;
+    return await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认覆盖角色？'), content: Text('“${existing.displayName}”（${role.id}）已存在，导入会覆盖它的提示词和显示名称。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('覆盖'))])) ?? false;
+  }
+  /// 默认角色在设置里另存了一份名称和提示词，保存默认角色时要一起更新。
+  Future<void> _syncDefault(RoleCard role) async {
+    if (role.id == defaultId) await widget.bridge.saveDefaultRole(id: role.id, name: role.displayName, prompt: role.prompt);
+  }
+  Future<void> _save() async { await _saveRole(); }
+  Future<RoleCard?> _saveRole() async {
     try {
       final enteredId = roleId.text.trim();
       final id = enteredId.isNotEmpty ? enteredId : generateRoleId(roleName.text, roles.map((role) => role.id));
@@ -1356,22 +1519,34 @@ class _RolePageState extends State<_RolePage> {
       }
       if (existing != null && (existing.prompt != prompt || existing.displayName != name)) {
         final confirmed = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认覆盖角色？'), content: Text('“$name”已存在，保存会覆盖它的提示词和显示名称。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('覆盖'))])) ?? false;
-        if (!confirmed) return;
+        if (!confirmed) return null;
       }
       final role = RoleCard(id: id, displayName: name, prompt: prompt);
       await widget.bridge.saveRoleCard(role);
-      if (mounted) setState(() { roleId.text = id; roleName.text = name; editingExisting = true; });
+      await _syncDefault(role);
       await _load();
       _edit(role);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('角色卡已保存：$name（$id）')));
-    } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$error'))); }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('角色卡已保存：$name（$id），下一条消息生效')));
+      return role;
+    } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$error'))); return null; }
   }
-  Future<void> _setDefault() async { if (roleId.text.trim().isEmpty) return; await widget.bridge.saveDefaultRole(id: roleId.text.trim(), name: roleName.text.trim(), prompt: rolePrompt.text); if (mounted) setState(() { defaultId = roleId.text.trim(); defaultName = roleName.text.trim(); }); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已设为默认角色'))); }
-  Future<void> _setRoleDefault(RoleCard role) async { await widget.bridge.saveDefaultRole(id: role.id, name: role.displayName, prompt: role.prompt); if (mounted) setState(() { defaultId = role.id; defaultName = role.displayName; roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已将“${role.displayName}”设为默认角色'))); }
+  /// 编辑框内容和已保存的不一样时先保存，保证设置里的默认角色和 Runtime 读到的文件一致。
+  Future<void> _setDefault() async {
+    final id = roleId.text.trim();
+    if (id.isEmpty) return;
+    var role = _stored(id);
+    final name = roleName.text.trim().isEmpty ? id : roleName.text.trim();
+    if (role == null || role.prompt != rolePrompt.text.trim() || role.displayName != name) {
+      role = await _saveRole();
+      if (role == null) return;
+    }
+    await _setRoleDefault(role);
+  }
+  Future<void> _setRoleDefault(RoleCard role) async { await widget.bridge.saveDefaultRole(id: role.id, name: role.displayName, prompt: role.prompt); if (mounted) setState(() { defaultId = role.id; defaultName = role.displayName; editingExisting = true; editingId = role.id; roleId.text = role.id; roleName.text = role.displayName; rolePrompt.text = role.prompt; }); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已将“${role.displayName}”设为默认角色'))); }
   Future<void> _delete() async { final id = roleId.text.trim(); if (id.isEmpty) return; final ok = await showDialog<bool>(context: context, builder: (context) => AlertDialog(title: const Text('确认删除角色？'), content: Text('将删除 $id，且无法恢复。'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除'))])) ?? false; if (!ok) return; await widget.bridge.deleteRoleCard(id); _newRole(); await _load(); }
-  Future<void> _import() async { try { final decoded = await decodeJsonInBackground(importJson.text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); importJson.clear(); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
+  Future<void> _import() async { try { final decoded = await decodeJsonInBackground(importJson.text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); if (!await _confirmOverwrite(role)) return; await widget.bridge.saveRoleCard(role); await _syncDefault(role); importJson.clear(); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
   Future<void> _export() async { final role = RoleCard(id: roleId.text.trim(), displayName: roleName.text.trim(), prompt: rolePrompt.text); final result = await widget.bridge.exportRoleCard(jsonEncode(role.toMap())); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['status'] == 'exported' ? '角色卡已导出' : '导出操作：${result['status']}'))); }
-  Future<void> _importFile() async { try { final text = await widget.bridge.importRoleCard(); if (text == null) return; final decoded = await decodeJsonInBackground(text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); await widget.bridge.saveRoleCard(role); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡文件已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
+  Future<void> _importFile() async { try { final text = await widget.bridge.importRoleCard(); if (text == null) return; final decoded = await decodeJsonInBackground(text); if (decoded is! Map) throw const FormatException('JSON 必须是对象'); final role = RoleCard.fromMap(decoded); if (!await _confirmOverwrite(role)) return; await widget.bridge.saveRoleCard(role); await _syncDefault(role); await _load(); _edit(role); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色卡文件已导入'))); } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败：$error'))); } }
   @override
   Widget build(BuildContext context) {
     final tokens = AppSurfaceTokens.of(context);
@@ -1414,7 +1589,7 @@ class _RolePageState extends State<_RolePage> {
                         const SizedBox(width: 10),
                         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(role.displayName, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
-                          Text('${role.id} · ${role.builtin ? '内置角色' : '自定义角色'}', style: TextStyle(fontSize: 11.5, color: tokens.mutedText)),
+                          Text(role.id, style: TextStyle(fontSize: 11.5, color: tokens.mutedText)),
                         ])),
                         if (role.id != defaultId) TextButton(onPressed: loading ? null : () => _setRoleDefault(role), child: const Text('设为默认')),
                         const Icon(Icons.chevron_right, size: 18),
@@ -1423,6 +1598,27 @@ class _RolePageState extends State<_RolePage> {
                   ),
               ]),
       ),
+      if (sessionOverrides.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        AppCard(
+          title: '会话单独角色（/preset）',
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('这些会话在 QQ 里用 /preset 切换过角色，不使用上面的默认角色。', style: TextStyle(fontSize: 12.5, color: tokens.mutedText)),
+            const SizedBox(height: 6),
+            for (final entry in sessionOverrides.entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(children: [
+                  Expanded(child: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13))),
+                  const SizedBox(width: 8),
+                  Text(_stored(entry.value)?.displayName ?? entry.value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(onPressed: loading ? null : _clearSessionOverrides, icon: const Icon(Icons.restart_alt, size: 18), label: const Text('全部恢复默认角色')),
+          ]),
+        ),
+      ],
       const SizedBox(height: 12),
       AppCard(
         title: editingExisting ? '编辑角色' : '新建角色',
