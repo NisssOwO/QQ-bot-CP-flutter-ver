@@ -89,6 +89,22 @@ class RuntimeCoordinator(
     private var reconnectAttempts = 0
     private var lastExtensionAt = 0L
     private var lastExtensionReport = 0L
+    private var selfHealCount = 0
+    private var lastSelfHealAt = 0L
+    private var giveUpReported = false
+
+    private companion object {
+        /** 启动后这么久之内不判定网关健康，等 Node 写出第一份状态。 */
+        const val STARTUP_GRACE_MS = 120_000L
+
+        /** 两次自愈重启之间的最小间隔。 */
+        const val SELF_HEAL_INTERVAL_MS = 180_000L
+
+        /** 连续这么多次自愈无效就停手。 */
+        const val SELF_HEAL_MAX_ATTEMPTS = 3
+
+        const val SOURCE_WATCHDOG = "gateway_watchdog"
+    }
 
     fun start(source: String) {
         val mine = synchronized(this) {
@@ -97,6 +113,12 @@ class RuntimeCoordinator(
             startedAt = System.currentTimeMillis()
             lastPhase = ""
             reconnectAttempts = 0
+            // 自愈重启不能把自己的计数清零，否则会无限重启；用户主动重启才重置。
+            if (source != SOURCE_WATCHDOG) {
+                selfHealCount = 0
+                lastSelfHealAt = 0L
+                giveUpReported = false
+            }
             token
         }
         RuntimeNotifier(service).update("正在启动 Runtime")
@@ -236,6 +258,76 @@ class RuntimeCoordinator(
                 }
             }
         }, delay)
+    }
+
+    /**
+     * 网关看门狗：进程还活着、但 QQ 网关连接已经不动时，自动重启 Runtime。
+     *
+     * 判断依据是 Node 侧写入的 gateway-status.json（[GatewayStatusStore]）。典型场景：
+     * 夜间被省电策略断网后，SDK 重连循环卡在一个永不返回的 await 上 —— 进程、前台服务、
+     * socket 都还在，网关却永远不会再连上，只有重启进程能救。
+     *
+     * 自愈至少间隔 [SELF_HEAL_INTERVAL_MS]，连续 [SELF_HEAL_MAX_ATTEMPTS] 次仍无效
+     * 就停手并只记一次失败，避免凭据错误或服务端故障时无限重启刷屏。
+     * 启动后的 [STARTUP_GRACE_MS] 内不判定，等 Node 自己写出第一份状态。
+     */
+    fun checkGatewayHealth(trigger: String) {
+        val mine = synchronized(this) {
+            if (!active) return
+            token
+        }
+        if (!isCurrent(mine)) return
+        val snapshot = GatewayStatusStore.read(service) ?: return
+        val alive = synchronized(this) { controller?.isAlive() == true }
+        if (!alive) {
+            // 进程已经退出：交给带退避的重连逻辑，看门狗不抢。
+            scheduleReconnect(immediate = false)
+            return
+        }
+        if (!snapshot.needsRecovery()) {
+            if (snapshot.isOnline) {
+                synchronized(this) {
+                    selfHealCount = 0
+                    giveUpReported = false
+                }
+            }
+            return
+        }
+        val decision = synchronized(this) {
+            if (!active) return
+            val now = System.currentTimeMillis()
+            if (now - startedAt < STARTUP_GRACE_MS) return
+            if (now - lastSelfHealAt < SELF_HEAL_INTERVAL_MS) return
+            if (selfHealCount >= SELF_HEAL_MAX_ATTEMPTS) {
+                if (giveUpReported) return
+                giveUpReported = true
+                "giveup"
+            } else {
+                lastSelfHealAt = now
+                selfHealCount++
+                "restart"
+            }
+        }
+        when (decision) {
+            "restart" -> {
+                val attempt = synchronized(this) { selfHealCount }
+                record(
+                    Status.RECONNECTING,
+                    "gateway.watchdog",
+                    "网关无响应（${snapshot.describe()}，来自 $trigger），正在自动重启 Runtime（第 $attempt 次）",
+                    mine = mine,
+                    errorCode = "gateway_watchdog_restart",
+                )
+                RuntimeLauncher.restart(service, SOURCE_WATCHDOG)
+            }
+            "giveup" -> record(
+                Status.FAILED,
+                "gateway.watchdog",
+                "网关连续 $SELF_HEAL_MAX_ATTEMPTS 次自动重启仍未恢复（${snapshot.describe()}），已停止自动重启，请检查网络或凭据",
+                mine = mine,
+                errorCode = "gateway_watchdog_gaveup",
+            )
+        }
     }
 
     private fun isCurrent(mine: Long): Boolean = synchronized(this) { active && mine == token }

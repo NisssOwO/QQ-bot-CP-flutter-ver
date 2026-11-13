@@ -190,6 +190,10 @@ object RuntimeAssetInstaller {
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/session/session-manager.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/model/prefs-store.js",
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/middleware/typing-indicator.js",
+            // 连接超时修复：HELLO 握手与 HTTP 响应体都必须有超时，否则断网后重连会永久挂起。
+            "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/protocol/gateway/gateway-connection.js",
+            "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/protocol/api/api-client.js",
+            "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/protocol/api/token.js",
         )
         files.forEach { assetPath ->
             try {

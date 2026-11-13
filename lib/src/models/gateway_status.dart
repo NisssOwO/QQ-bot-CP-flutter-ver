@@ -47,7 +47,7 @@ class GatewayStatus {
   /// 本次进入 online 的起始时间（毫秒）。
   final int since;
 
-  /// 最后一次心跳写入时间（毫秒）；只有在线时才会更新。
+  /// 最后一次状态写入时间（毫秒）。在线时每 20 秒刷一次心跳。
   final int updatedAt;
   final int attempts;
   final int? code;
@@ -60,6 +60,10 @@ class GatewayStatus {
   /// 心跳超过这个时长没更新，说明网关那条连接已经没人维护了。
   static const Duration staleAfter = Duration(seconds: 90);
 
+  /// 连接中/重连中超过这个时长没有任何状态写入，说明重连循环卡死了。
+  /// SDK 的重连退避最长 60 秒，每次失败都会写一次状态，所以 180 秒足够宽裕。
+  static const Duration stallAfter = Duration(seconds: 180);
+
   bool get hasData => state != 'unknown' && updatedAt > 0;
 
   DateTime? get updated => updatedAt > 0 ? DateTime.fromMillisecondsSinceEpoch(updatedAt) : null;
@@ -71,6 +75,14 @@ class GatewayStatus {
     final at = updated;
     if (at == null || kind != GatewayState.online) return false;
     return now.difference(at) > staleAfter;
+  }
+
+  /// 连接中/重连中卡住了：SDK 还停在某个永不返回的 await 上，不会再自己恢复。
+  bool stalled(DateTime now) {
+    final at = updated;
+    if (at == null) return false;
+    if (kind != GatewayState.connecting && kind != GatewayState.reconnecting) return false;
+    return now.difference(at) > stallAfter;
   }
 
   /// 已连接时长（只在在线且心跳新鲜时有意义）。

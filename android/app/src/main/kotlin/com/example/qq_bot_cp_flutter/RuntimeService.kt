@@ -18,6 +18,10 @@ class RuntimeService : Service() {
         const val ACTION_RESTART = "com.shinycolors.officialbot.action.RESTART_RUNTIME"
         const val EXTRA_SOURCE = "source"
         const val CODE_START_FAILED = "runtime_start_failed"
+        /** 网关看门狗的检查周期。 */
+        const val GATEWAY_WATCHDOG_INTERVAL_MS = 60_000L
+        /** 网络刚恢复时先给 SDK 一点时间自己连，再判断是否需要自愈。 */
+        const val NETWORK_PROBE_DELAY_MS = 20_000L
         /** Guards every persisted stage so state, log, widget and notification agree. */
         val STAGE_LOCK = Any()
     }
@@ -25,6 +29,20 @@ class RuntimeService : Service() {
     private var coordinator: RuntimeCoordinator? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var started = false
+    private val watchdog = Handler(Looper.getMainLooper())
+
+    /**
+     * 周期检查 QQ 网关是否真的活着。Node 进程和前台服务都正常也不代表网关通，
+     * 夜间被省电断网后 SDK 会卡在永不返回的 await 上（见 RuntimeCoordinator.checkGatewayHealth）。
+     */
+    private val watchdogTask = object : Runnable {
+        override fun run() {
+            coordinator?.checkGatewayHealth("watchdog")
+            watchdog.postDelayed(this, GATEWAY_WATCHDOG_INTERVAL_MS)
+        }
+    }
+
+    private val networkProbe = Runnable { coordinator?.checkGatewayHealth("network_available") }
 
     override fun onCreate() {
         super.onCreate()
@@ -35,6 +53,7 @@ class RuntimeService : Service() {
         val notifier = RuntimeNotifier(this)
         startForeground(RuntimeNotifier.ID, notifier.build("正在启动 Runtime"))
         registerNetworkCallback()
+        watchdog.postDelayed(watchdogTask, GATEWAY_WATCHDOG_INTERVAL_MS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -50,6 +69,7 @@ class RuntimeService : Service() {
 
     override fun onDestroy() {
         serviceAlive = false
+        watchdog.removeCallbacksAndMessages(null)
         networkCallback?.let { callback ->
             try {
                 getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(callback)
@@ -114,6 +134,9 @@ class RuntimeService : Service() {
                     getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString("networkStatus", "在线").apply()
                     RuntimeEventBus.emit("info", "network", "网络已恢复，准备检查 Runtime 连接", errorCode = "network_available")
                     coordinator?.onNetworkAvailable()
+                    // 断网期间 SDK 可能已经卡死，给 20 秒自连机会后再兜底检查一次。
+                    watchdog.removeCallbacks(networkProbe)
+                    watchdog.postDelayed(networkProbe, NETWORK_PROBE_DELAY_MS)
                 }
             }
 

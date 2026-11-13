@@ -80,4 +80,29 @@ void main() {
     expect(status.kind.isUp, isFalse);
     expect(status.kind.isBad, isFalse);
   });
+
+  test('stalled reconnect is detected after 180 seconds without progress', () {
+    final updated = DateTime(2026, 11, 13, 7, 10, 0);
+    final status = GatewayStatus.fromMap(<String, Object?>{
+      'state': 'reconnecting',
+      'updatedAt': updated.millisecondsSinceEpoch,
+      'attempts': 18,
+      'code': 1006,
+    });
+
+    // 60 秒退避里不算卡住，超过 180 秒没有任何写入就是重连循环卡死了。
+    expect(status.stalled(updated.add(const Duration(seconds: 120))), isFalse);
+    expect(status.stalled(updated.add(const Duration(minutes: 24))), isTrue);
+    // 只有连接中/重连中才有“卡住”这个概念。
+    expect(
+      GatewayStatus.fromMap(<String, Object?>{'state': 'online', 'updatedAt': updated.millisecondsSinceEpoch})
+          .stalled(updated.add(const Duration(hours: 1))),
+      isFalse,
+    );
+  });
+
+  test('connecting without a snapshot is never treated as stalled', () {
+    final status = GatewayStatus.fromMap(<String, Object?>{'state': 'connecting'});
+    expect(status.stalled(DateTime(2026, 11, 13, 8)), isFalse);
+  });
 }

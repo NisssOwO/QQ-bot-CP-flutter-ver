@@ -452,7 +452,7 @@ class _OverviewPage extends StatelessWidget {
       ])),
       const SizedBox(height: 12),
       AppCard(child: Wrap(spacing: 8, runSpacing: 8, children: [
-        _Pill(label: 'QQ：${state.qqStatus}', tone: state.qqStatus == '在线' ? tokens.heroEnd : tokens.mutedText),
+        _qqPill(context),
         _Pill(label: 'AI：${state.aiStatus}', tone: state.aiStatus == '在线' ? tokens.heroEnd : tokens.mutedText),
         _Pill(label: '网络：${state.networkStatus}', tone: state.networkStatus == '在线' ? tokens.heroEnd : tokens.mutedText),
         if (state.reconnectAttempts > 0) _Pill(label: '第 ${state.reconnectAttempts} 次重连 · ${state.nextRetryMs ~/ 1000}s', tone: AppThemeTokens.of(context).warning),
@@ -466,6 +466,25 @@ class _OverviewPage extends StatelessWidget {
         child: Column(children: [for (final command in _chatCommands) _CommandCopyRow(command: command.$1, description: command.$2)]),
       ),
     ]);
+  }
+
+  /// 底部状态 pill 用网关的真实状态，避免把「进程还活着」显示成「在线」。
+  /// 与 [state.qqStatus] 不同，这里读的是 SDK 写出的连接状态文件。
+  Widget _qqPill(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    final theme = AppThemeTokens.of(context);
+    final now = DateTime.now();
+    final (String label, Color tone) = !gateway.hasData
+        ? (state.qqStatus, state.qqStatus == '在线' ? tokens.heroEnd : tokens.mutedText)
+        : switch (gateway.kind) {
+            GatewayState.online => gateway.heartbeatStale(now) ? ('心跳超时', theme.warning) : ('在线', tokens.heroEnd),
+            GatewayState.connecting => gateway.stalled(now) ? ('连接卡住', theme.error) : ('连接中', tokens.mutedText),
+            GatewayState.reconnecting => gateway.stalled(now) ? ('重连卡住', theme.error) : ('重连中', theme.warning),
+            GatewayState.offline => ('已离线', theme.error),
+            GatewayState.failed => ('启动失败', theme.error),
+            GatewayState.unknown => (state.qqStatus, tokens.mutedText),
+          };
+    return _Pill(label: 'QQ：$label', tone: tone);
   }
 
   /// QQ 网关的真实连接状态。这是唯一能区分「进程还在」和「真的在线」的地方：
@@ -487,11 +506,19 @@ class _OverviewPage extends StatelessWidget {
     } else if (kind == GatewayState.online) {
       title = '心跳超时';
       tone = theme.warning;
-      detail = '最后一次心跳 ${_agoLabel(now, gateway.updated)}。进程可能还活着，但这条连接已经没人维护了，消息收不到。';
+      detail = '最后一次心跳 ${_agoLabel(now, gateway.updated)}。进程可能还活着，但这条连接已经没人维护了，消息收不到。App 会自动重启 Runtime。';
+    } else if (kind == GatewayState.connecting && gateway.stalled(now)) {
+      title = '连接卡住';
+      tone = theme.error;
+      detail = '最后一次状态写入在 ${_agoLabel(now, gateway.updated)}，握手看起来停在了一个不会返回的请求上。App 会自动重启 Runtime。';
     } else if (kind == GatewayState.connecting) {
       title = '连接中';
       tone = tokens.mutedText;
       detail = '正在建立 QQ 网关长连接…';
+    } else if (kind == GatewayState.reconnecting && gateway.stalled(now)) {
+      title = '重连卡住';
+      tone = theme.error;
+      detail = '第 ${gateway.attempts} 次重连后，最后一次状态写入在 ${_agoLabel(now, gateway.updated)}${_gatewayCodeText(gateway)}。重连循环已经卡死，App 会自动重启 Runtime。';
     } else if (kind == GatewayState.reconnecting) {
       title = '重连中';
       tone = theme.warning;
