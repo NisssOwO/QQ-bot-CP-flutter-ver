@@ -182,6 +182,9 @@ object RuntimeAssetInstaller {
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/bootstrap.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/gateway-status.js",
+            // 网关事件流水：只追加不覆盖，用来回答“之前发生过什么”，
+            // 状态快照里的 lastError 会被下一次断开覆盖，必须靠这个文件留证据。
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/gateway-events.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/middleware/proactive-reply.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/inbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/outbound.js",

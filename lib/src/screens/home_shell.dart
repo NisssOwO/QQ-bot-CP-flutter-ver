@@ -23,6 +23,7 @@ import '../theme/theme_bridge.dart';
 import '../theme/app_theme_tokens.dart';
 import '../theme/app_theme.dart';
 import 'proactive_reply_page.dart' show ProactiveReplyPage;
+import 'gateway_events_page.dart' show GatewayEventsPage;
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, this.onThemeChanged});
@@ -33,6 +34,10 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
+  /// 与 RuntimeLogRecorder.HISTORY_LIMIT 保持一致：原生侧存 2000 条，
+  /// 界面也只保留 2000 条，否则旧日志会被 UI 提前丢掉、看不到断连之前的现场。
+  static const int _maxLogEntries = 2000;
+
   final _bridge = RuntimeBridge();
   final _logs = <RuntimeLogEntry>[];
   Timer? _watchdog;
@@ -59,7 +64,7 @@ class _HomeShellState extends State<HomeShell> {
       if (!mounted) return;
       setState(() {
         _logs.add(entry);
-        if (_logs.length > 500) _logs.removeAt(0);
+        if (_logs.length > _maxLogEntries) _logs.removeAt(0);
       });
       // Runtime status is persisted by the Android service as each stage arrives. Refresh
       // the summary card when a state-bearing event arrives so the page does not remain on
@@ -141,7 +146,7 @@ class _HomeShellState extends State<HomeShell> {
       if (!mounted) return;
       setState(() {
         _logs.addAll(recent);
-        if (_logs.length > 500) _logs.removeRange(0, _logs.length - 500);
+        if (_logs.length > _maxLogEntries) _logs.removeRange(0, _logs.length - _maxLogEntries);
       });
     } catch (_) { }
   }
@@ -277,6 +282,7 @@ class _HomeShellState extends State<HomeShell> {
       _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
       ProactiveReplyPage(bridge: _bridge),
+      GatewayEventsPage(bridge: _bridge),
     ];
     // 手机上用底部导航，平板横过来后换成左侧导航加更宽的卡片。
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -715,6 +721,7 @@ const List<(IconData, IconData, String)> _navItems = [
   (Icons.person_outline, Icons.person, '角色'),
   (Icons.settings_outlined, Icons.settings, '设置'),
   (Icons.forum_outlined, Icons.forum, '主动回复'),
+  (Icons.timeline_outlined, Icons.timeline, '网关事件'),
 ];
 
 /// 状态卡右上角的小胶囊按钮，避免悬浮按钮压住下面的卡片。

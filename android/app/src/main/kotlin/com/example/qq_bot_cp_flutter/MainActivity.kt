@@ -76,6 +76,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "getRuntimeState" -> result.success(runtimeState())
                 "getGatewayStatus" -> result.success(readGatewayStatus())
+                "getGatewayEvents" -> result.success(readGatewayEvents(((call.arguments as? Map<*, *>)?.get("limit") as? Number)?.toInt() ?: DEFAULT_GATEWAY_EVENT_LIMIT))
                 "getSessionRoleStatus" -> result.success(sessionRoleStatus())
                 "getRecentLogs" -> result.success(RuntimeEventBus.recentLogs())
                 "clearRuntimeLogs" -> result.success(clearRuntimeLogs())
@@ -248,6 +249,43 @@ class MainActivity : FlutterActivity() {
         val file = gatewayStatusFile()
         val json = try { if (file.isFile) JSONObject(file.readText(Charsets.UTF_8)) else null } catch (_: Exception) { null }
         return if (json != null) jsonToMap(json) else mapOf("schemaVersion" to 1, "state" to "unknown", "updatedAt" to 0L)
+    }
+
+    /**
+     * 网关事件流水的候选路径。
+     *
+     * 优先读 App 私有状态目录：runtime 目录在 assetVersion 变化时会被整个删掉重建，
+     * 事件流水不能跟着一起丢。第二个位置是旧版本（0.2.7）写过的路径，保留兼容。
+     */
+    private fun gatewayEventFiles(): List<File> = listOf(
+        File(filesDir, ".dsh-qqbot/gateway-events.jsonl"),
+        File(filesDir, "runtime/logs/gateway-events.jsonl"),
+    )
+
+    /**
+     * 读取网关事件流水（只追加，永不覆盖）。
+     *
+     * 返回 `{path, lines, events}`：`lines` 是文件总行数，便于判断是否发生过轮转；
+     * `events` 只带最后 [limit] 条。解析失败的行用 `raw` 原样带出——排查时宁可看到
+     * 半截文本，也不要因为一行坏掉就整页空白。
+     */
+    private fun readGatewayEvents(limit: Int): Map<String, Any?> {
+        val file = gatewayEventFiles().firstOrNull { it.isFile }
+            ?: return mapOf("path" to "", "lines" to 0, "events" to emptyList<Map<String, Any?>>())
+        val lines = try {
+            file.useLines { it.toList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val tail = lines.filter { it.isNotBlank() }.takeLast(limit.coerceIn(1, MAX_GATEWAY_EVENTS))
+        val events = tail.mapNotNull { line ->
+            try {
+                jsonToMap(JSONObject(line))
+            } catch (_: Exception) {
+                mapOf("event" to "unparsed", "raw" to line)
+            }
+        }
+        return mapOf("path" to file.absolutePath, "lines" to lines.size, "events" to events)
     }
 
     private fun readProactiveReplyConfig(): Map<String, Any?> {
@@ -958,5 +996,13 @@ class MainActivity : FlutterActivity() {
             while (count > 0) { digest.update(buffer, 0, count); count = input.read(buffer) }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private companion object {
+        /** 网关事件页默认拉取的条数，够覆盖最近一次重连风暴。 */
+        const val DEFAULT_GATEWAY_EVENT_LIMIT = 500
+
+        /** 单次读取的硬上限，防止文件被外部写爆时把 Flutter 主线程拖死。 */
+        const val MAX_GATEWAY_EVENTS = 2000
     }
 }

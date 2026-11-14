@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import '../models/endpoint_test_result.dart';
+import '../models/gateway_event.dart';
 import '../models/gateway_status.dart';
 import '../models/public_config.dart';
 import '../models/runtime_log.dart';
@@ -86,6 +87,12 @@ class RuntimeBridge {
   Future<GatewayStatus> gatewayStatus() async => GatewayStatus.fromMap(
         (await _call<Map<dynamic, dynamic>>('getGatewayStatus', null, const Duration(seconds: 8), 1)) ?? const <dynamic, dynamic>{},
       );
+
+  /// 网关事件流水（只追加，不会因为下一次重连被覆盖）。
+  Future<GatewayEventLog> gatewayEvents({int limit = 500}) async {
+    final raw = await _call<Map<dynamic, dynamic>>('getGatewayEvents', {'limit': limit}, const Duration(seconds: 12), 1);
+    return GatewayEventLog.fromMap(raw ?? const {});
+  }
 
   Future<ProactiveReplyConfig> proactiveReplyConfig() async {
     final raw = await _call<Map<dynamic, dynamic>>('getProactiveReplyConfig', null, const Duration(seconds: 12), 1);

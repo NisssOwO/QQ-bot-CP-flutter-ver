@@ -36,7 +36,8 @@ await writeFile(join(dir, '.dsh-qqbot', 'proactive-reply-test.json'), JSON.strin
 await sleep(4000);
 let state = await readState();
 assert.equal(state.requireMention, true);
-assert.ok(state.timeZone);
+assert.equal(typeof state.timeZone, 'string');
+assert.equal(Number.isFinite(state.utcOffsetMinutes), true);
 assert.equal(state.groups.G1.lastTestId, 't1');
 assert.match(state.groups.G1.lastTestResult, /^测试已发送/, state.groups.G1.lastTestResult);
 assert.equal(sent.length, 1);

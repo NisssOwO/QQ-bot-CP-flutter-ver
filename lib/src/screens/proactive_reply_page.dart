@@ -193,14 +193,15 @@ class _ProactiveReplyPageState extends State<ProactiveReplyPage> {
   /// 写测试请求，然后最多等 75 秒（模型超时 60 秒 + 轮询）读结果。
   Future<void> _test() async {
     if (_group.isEmpty || _testing) return;
+    final group = _group;
     setState(() => _testing = true);
     try {
-      final id = await widget.bridge.testProactiveReply(_group);
+      final id = await widget.bridge.testProactiveReply(group);
       final deadline = DateTime.now().add(const Duration(seconds: 75));
       while (mounted && DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(const Duration(seconds: 2));
         final runtime = await widget.bridge.proactiveReplyStatus();
-        final g = runtime.group(_group);
+        final g = runtime.group(group);
         if (g != null && g.lastTestId == id) {
           if (!mounted) return;
           setState(() => _runtime = runtime);
@@ -300,7 +301,14 @@ class _ProactiveReplyPageState extends State<ProactiveReplyPage> {
               const SizedBox(height: 4),
               const Text('带 * 的群有单独设置；没有单独设置的字段跟随全局。',
                   style: TextStyle(color: Colors.grey, fontSize: 12)),
-              if (_group.isNotEmpty) _statusCard(current, overridden),
+              if (_group.isNotEmpty)
+                _statusCard(current, overridden)
+              else
+                const Card(
+                    child: ListTile(
+                        leading: Icon(Icons.send),
+                        title: Text('马上发一条'),
+                        subtitle: Text('请先在上方选择一个群；如果列表没有该群，可手动添加群 OpenID。'))),
               const SizedBox(height: 8),
               Card(
                   child: Column(children: [
@@ -383,7 +391,7 @@ class _ProactiveReplyPageState extends State<ProactiveReplyPage> {
                             height: 16,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : const Icon(Icons.send, size: 18),
-                    label: Text(_testing ? '生成中…' : '立即测试一次')),
+                    label: Text(_testing ? '生成中…' : '马上发一条')),
                 const SizedBox(width: 8),
                 const Expanded(
                     child: Text('跳过概率、冷却和次数限制，回复群里最近一条消息（需 4.5 分钟内有人发言）',
