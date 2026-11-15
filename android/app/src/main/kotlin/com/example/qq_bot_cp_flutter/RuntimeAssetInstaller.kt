@@ -197,6 +197,9 @@ object RuntimeAssetInstaller {
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/protocol/gateway/gateway-connection.js",
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/protocol/api/api-client.js",
             "runtime/node_modules/@tencent-connect/qqbot-nodejs/dist/protocol/api/token.js",
+            // 服务端联网搜索：pi-ai 的 openai-completions 补丁负责按开关注入
+            // deepseek_web_search，必须随包刷新，否则重装后回到原版、搜索静默消失。
+            "runtime/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
         )
         files.forEach { assetPath ->
             try {

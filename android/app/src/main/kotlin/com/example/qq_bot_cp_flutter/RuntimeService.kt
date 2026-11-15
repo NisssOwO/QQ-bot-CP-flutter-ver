@@ -99,9 +99,14 @@ class RuntimeService : Service() {
             val config = getSharedPreferences("public-config", MODE_PRIVATE)
             val defaultRole = getSharedPreferences("default-role", MODE_PRIVATE).getString("id", "").orEmpty()
             val protocol = config.getString("protocol", "").orEmpty()
-            val api = when (protocol) {
-                "openai-responses" -> "openai-responses"
-                "anthropic-messages" -> "anthropic-messages"
+            val baseUrl = config.getString("baseUrl", "").orEmpty()
+            // DeepSeek 官方端点固定走 /chat/completions：只有这条请求路径验证过服务端
+            // 联网搜索（deepseek_web_search）与 thinking:{type} 格式；Responses 协议下
+            // 思考字段与工具声明都需要另行适配，留给后续。
+            val api = when {
+                baseUrl.contains("deepseek.com", ignoreCase = true) -> "openai-completions"
+                protocol == "openai-responses" -> "openai-responses"
+                protocol == "anthropic-messages" -> "anthropic-messages"
                 else -> "openai-completions"
             }
             return mapOf(
@@ -115,6 +120,11 @@ class RuntimeService : Service() {
                 "LLM_MODEL" to config.getString("model", "").orEmpty(),
                 "LLM_BASE_URL" to config.getString("baseUrl", "").orEmpty(),
                 "LLM_THINKING_LEVEL" to config.getString("thinkingLevel", "medium").orEmpty(),
+                // DeepSeek 服务端联网搜索：pi-ai 只会在 DeepSeek 官方端点上真正注入
+                // deepseek_web_search，换第三方聚合站时该开关自动失效，不会因未知字段被拒。
+                // 同一个变量也让 web-tools 插件让位，避免 Bing 兜底抢走本该走服务端深度搜索的问题。
+                "DEEPSEEK_WEB_SEARCH" to
+                    if (config.getBoolean("webSearch", true) && baseUrl.contains("deepseek.com", ignoreCase = true)) "1" else "0",
                 "LLM_PRESET" to defaultRole,
                 // Node 子进程默认按 UTC 计时；主动回复的安静时段和每日计数需要设备时区。
                 "TZ" to java.util.TimeZone.getDefault().id,

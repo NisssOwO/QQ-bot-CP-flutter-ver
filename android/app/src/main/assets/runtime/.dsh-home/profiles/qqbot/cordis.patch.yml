@@ -26,7 +26,8 @@
             # qwen-style thinkingFormat is valid only for openai-completions.
             # Responses and Anthropic routes must receive an empty compat object,
             # otherwise dsh rejects the profile before the first request.
-            compat: !!js "process.env.LLM_API === 'openai-completions' ? { thinkingFormat: 'qwen' } : {}"
+            # DeepSeek 官方端点只认 thinking:{type}，聚合站认 enable_thinking，按端点自动选。
+            compat: !!js "process.env.LLM_API === 'openai-completions' ? { thinkingFormat: (process.env.LLM_BASE_URL || '').indexOf('deepseek.com') >= 0 ? 'deepseek' : 'qwen' } : {}"
 
 - id: im-qqbot
   config:
