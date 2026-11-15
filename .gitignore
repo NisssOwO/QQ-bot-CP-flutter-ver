@@ -7,7 +7,10 @@ android/local.properties
 *.iml
 android/app/src/main/assets/runtime/*
 !android/app/src/main/assets/runtime/runtime-entry.mjs
-!android/app/src/main/assets/runtime/.dsh-home/
+# The packaged profile tree is assets-dsh-home (aapt drops dot-directories, so a
+# ".dsh-home" copy would never reach the APK). Keep exactly one source of truth.
+!android/app/src/main/assets/runtime/assets-dsh-home/
+!android/app/src/main/assets/runtime/qqbot-android.patch.yml
 release/*.apk
 work/
 tool/personal-markers.local.txt

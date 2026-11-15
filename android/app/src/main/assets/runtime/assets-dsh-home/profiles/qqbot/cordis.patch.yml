@@ -8,6 +8,8 @@
           trust: user
       includeUserRoot: true
       default: !!js "process.env.LLM_PRESET || ''"
+  - id: web-tools
+    name: '@shiny-colors/web-tools'
 
 - id: llm-pi-ai
   config:
@@ -24,9 +26,10 @@
             maxTokens: 8192
             reasoning: true
             # qwen-style thinkingFormat is valid only for openai-completions.
-            # Responses and Anthropic routes must receive an empty compat object,
-            # otherwise dsh rejects the profile before the first request.
-            # DeepSeek 官方端点只认 thinking:{type}，聚合站认 enable_thinking，按端点自动选。
+            # Responses and Anthropic routes must receive an empty compat object.
+            # DeepSeek 官方端点只认 thinking:{type:enabled|disabled}（deepseek 格式），
+            # 第三方聚合站认识的是 enable_thinking（qwen 格式）。用错格式会静默关掉思考，
+            # 而关掉思考时服务端联网搜索只会返回空结果并让模型凭空编造，必须按端点自动选。
             compat: !!js "process.env.LLM_API === 'openai-completions' ? { thinkingFormat: (process.env.LLM_BASE_URL || '').indexOf('deepseek.com') >= 0 ? 'deepseek' : 'qwen' } : {}"
 
 - id: im-qqbot
@@ -71,6 +74,14 @@
 - id: tool-fs-search
   disabled: true
 
+# 手机上没有可用的抓取通道：模型一旦尝试 web_fetch，工具会以
+# TOOL_OUTCOME_UNKNOWN 结束整轮对话，聊天里只剩一条报错。聊天机器人不需要
+# 联网工具，直接关掉，模型会用自己的知识回答。
+- id: tool-web
+  disabled: true
+- id: web-fetch-http
+  disabled: true
+
 - id: image-offload
   disabled: true
 
@@ -81,6 +92,41 @@
 - id: command-goal
   disabled: true
 - id: tool-goal
+  disabled: true
+
+# 手机端只有聊天功能，下列插件依赖桌面环境的 shell/workingDirectory/subagents
+# 或遥测上报，加载后必然处于 pending / import 失败状态，只会污染启动日志。
+- id: plugin-manager
+  disabled: true
+- id: tool-plugin-manager
+  disabled: true
+- id: otel
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+- id: permission
+  disabled: true
+- id: agent-instructions
+  disabled: true
+- id: tool-skill
+  disabled: true
+- id: subagent
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: workflow-ptc
+  disabled: true
+- id: tool-workflow
   disabled: true
 
 
