@@ -18,8 +18,8 @@ class _ProactiveReplyPageState extends State<ProactiveReplyPage> {
     ('dailyLimitPerGroup', '每日每群上限', '条'),
     ('historyMessages', '上下文消息数', '条'),
     ('requireRecentActivitySeconds', '最近活跃窗口（0 为不限制）', '秒'),
-    ('minTextLength', '最短文本长度', '字'),
-    ('maxTextLength', '最长文本长度', '字'),
+    ('minTextLength', '触发所需最短群消息', '字'),
+    ('maxTextLength', '回复最长字数', '字'),
   ];
 
   ProactiveReplyConfig? _config;
@@ -171,10 +171,6 @@ class _ProactiveReplyPageState extends State<ProactiveReplyPage> {
         return;
       }
       json[f.$1] = parsed;
-    }
-    if ((json['minTextLength'] as int) > (json['maxTextLength'] as int)) {
-      _toast('最短文本长度不能大于最长文本长度');
-      return;
     }
     final settings = ProactiveReplySettings.fromJson(json);
     final current = _config ?? const ProactiveReplyConfig();
