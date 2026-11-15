@@ -279,10 +279,7 @@ class _HomeShellState extends State<HomeShell> {
       _OverviewPage(state: _state, gateway: _gateway, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
       _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs, onClear: _clearLogs, bridge: _bridge),
-      _RolePage(bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
-      ProactiveReplyPage(bridge: _bridge),
-      GatewayEventsPage(bridge: _bridge),
     ];
     // 手机上用底部导航，平板横过来后换成左侧导航加更宽的卡片。
     final wide = MediaQuery.sizeOf(context).width >= 900;
@@ -718,10 +715,7 @@ const List<(IconData, IconData, String)> _navItems = [
   (Icons.dashboard_outlined, Icons.dashboard, '总览'),
   (Icons.auto_awesome_outlined, Icons.auto_awesome, 'AI'),
   (Icons.article_outlined, Icons.article, '日志'),
-  (Icons.person_outline, Icons.person, '角色'),
   (Icons.settings_outlined, Icons.settings, '设置'),
-  (Icons.forum_outlined, Icons.forum, '主动回复'),
-  (Icons.timeline_outlined, Icons.timeline, '网关事件'),
 ];
 
 /// 状态卡右上角的小胶囊按钮，避免悬浮按钮压住下面的卡片。
@@ -829,6 +823,9 @@ class _LogPageState extends State<_LogPage> {
   final search = TextEditingController();
   List<RuntimeLogEntry> filtered = const [];
   bool filtering = false;
+  /// 日志页装两类数据：给人看的运行时输出，和 Node 侧只追加写入的网关事件。
+  /// 两者都在回答“到底发生了什么”，用切换区分，不再各占一个底部导航位置。
+  bool _showGateway = false;
 
   @override
   void dispose() {
@@ -913,6 +910,28 @@ class _LogPageState extends State<_LogPage> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppSurfaceTokens.of(context);
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+        child: SegmentedButton<bool>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: false, label: Text('运行日志'), icon: Icon(Icons.article_outlined, size: 18)),
+            ButtonSegment(value: true, label: Text('网关事件'), icon: Icon(Icons.timeline_outlined, size: 18)),
+          ],
+          selected: {_showGateway},
+          onSelectionChanged: (value) => setState(() => _showGateway = value.first),
+        ),
+      ),
+      Expanded(
+        child: _showGateway
+            ? GatewayEventsPage(bridge: widget.bridge)
+            : _runtimeLogView(tokens),
+      ),
+    ]);
+  }
+
+  Widget _runtimeLogView(AppSurfaceTokens tokens) {
     return Column(children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 6),
@@ -1114,10 +1133,36 @@ class _ConfigPageState extends State<_ConfigPage> {
     } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('拉取模型失败：$error'))); }
     finally { if (mounted) setState(() => loadingModels = false); }
   }
+  /// 角色卡和 AI 接口都属于“让模型怎么说话”，但字段多，单独一页更好改。
+  void _openRoles(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('角色卡')),
+        body: _RolePage(bridge: widget.bridge),
+      ),
+    ));
+  }
   @override
   Widget build(BuildContext context) {
     final tokens = AppSurfaceTokens.of(context);
     return _pageBody(context, [
+      AppCard(
+        title: '角色卡',
+        trailing: Icon(Icons.person_outline, size: 20, color: tokens.mutedText),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('聊天使用的人格提示词。切换角色不会清空对话：同一个群或私聊始终共用一份记忆。', style: TextStyle(fontSize: 12.5, height: 1.5, color: tokens.mutedText)),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openRoles(context),
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('打开角色卡设置'),
+            ),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 12),
       if (history.isNotEmpty) ...[
         AppCard(
           title: '历史配置',
@@ -1248,6 +1293,15 @@ class _SettingsPageState extends State<_SettingsPage> {
   Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = defaultUpdateManifestUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
+  /// 主动回复字段多、还有群级覆盖，单独一页比塞进设置卡片更清楚；从设置页进去。
+  void _openProactiveReply(BuildContext context) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('主动回复')),
+        body: ProactiveReplyPage(bridge: widget.bridge),
+      ),
+    ));
+  }
   Future<void> _install() async {
     setState(() => installing = true);
     final result = await widget.bridge.pickAndInstallApk();
@@ -1343,6 +1397,23 @@ class _SettingsPageState extends State<_SettingsPage> {
           Expanded(child: OutlinedButton.icon(onPressed: () async { try { await widget.bridge.openBatteryOptimizationSettings(); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开电池设置：$error'))); } }, icon: const Icon(Icons.battery_saver, size: 18), label: const Text('电池优化'))),
           const SizedBox(width: 8),
           Expanded(child: OutlinedButton.icon(onPressed: () async { try { await widget.bridge.openNotificationSettings(); } catch (error) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('无法打开通知设置：$error'))); } }, icon: const Icon(Icons.notifications_outlined, size: 18), label: const Text('通知设置'))),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '主动回复',
+        trailing: Icon(Icons.forum_outlined, size: 20, color: AppSurfaceTokens.of(context).mutedText),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('群里没人 @ 机器人时，按概率和冷却规则偶尔插一句话；可分别设置全局默认和单个群。这里只管主动插话，普通 @ 回复不受它的字数限制。', style: TextStyle(fontSize: 12.5, height: 1.5, color: AppSurfaceTokens.of(context).mutedText)),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openProactiveReply(context),
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('打开主动回复设置'),
+            ),
+          ),
         ]),
       ),
       const SizedBox(height: 12),
