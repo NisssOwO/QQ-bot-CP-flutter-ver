@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:qq_bot_cp/main.dart';
@@ -27,6 +28,12 @@ void main() {
     expect(find.textContaining('重启'), findsWidgets);
 
     await tester.tap(find.text('AI').last);
+    await tester.pumpAndSettle();
+    // AI 页现在是角色卡 + 接口摘要，接口表单收进了子页面。
+    expect(find.text('角色列表'), findsOneWidget);
+    final interfaceEntry = find.text('配置接口与模型');
+    await tester.scrollUntilVisible(interfaceEntry, 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(interfaceEntry);
     await tester.pumpAndSettle();
     expect(find.textContaining('API Key'), findsWidgets);
 

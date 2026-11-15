@@ -277,7 +277,7 @@ class _HomeShellState extends State<HomeShell> {
     final startupStats = summarizeStartup(_logs);
     final pages = <Widget>[
       _OverviewPage(state: _state, gateway: _gateway, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
-      _ConfigPage(bridge: _bridge, onSaved: _refreshConfig),
+      _AiPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs, onClear: _clearLogs, bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
     ];
@@ -989,14 +989,87 @@ class _LogPageState extends State<_LogPage> {
   }
 }
 
-class _ConfigPage extends StatefulWidget {
-  const _ConfigPage({required this.bridge, this.onSaved});
+/// AI 页：人格（角色卡）是主体，接口地址、模型、QQ 凭据收进子页面。
+class _AiPage extends StatefulWidget {
+  const _AiPage({required this.bridge, this.onSaved});
   final RuntimeBridge bridge;
   final VoidCallback? onSaved;
-  @override State<_ConfigPage> createState() => _ConfigPageState();
+  @override
+  State<_AiPage> createState() => _AiPageState();
 }
 
-class _ConfigPageState extends State<_ConfigPage> {
+class _AiPageState extends State<_AiPage> {
+  String baseUrl = '';
+  String model = '';
+  String protocol = '';
+  bool llmConfigured = false;
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    try {
+      final c = await widget.bridge.config();
+      if (mounted) setState(() { baseUrl = c.baseUrl; model = c.model; protocol = c.protocol; llmConfigured = c.llmConfigured; });
+    } catch (_) {
+      // 读不到配置时保持上一次的摘要，不影响角色卡编辑。
+    }
+  }
+
+  Future<void> _openInterface(BuildContext context) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => _InterfacePage(bridge: widget.bridge, onSaved: widget.onSaved),
+    ));
+    if (mounted) await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = AppSurfaceTokens.of(context);
+    final theme = AppThemeTokens.of(context);
+    final summary = [
+      if (model.isNotEmpty) model,
+      if (protocol.isNotEmpty) protocol,
+    ].join(' · ');
+    return _pageBody(context, [
+      _FullWidth(AppCard(
+        title: 'AI 接口',
+        trailing: Icon(Icons.router_outlined, size: 20, color: tokens.mutedText),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(llmConfigured ? Icons.verified_outlined : Icons.info_outline, size: 16, color: llmConfigured ? theme.success : tokens.mutedText),
+            const SizedBox(width: 8),
+            Expanded(child: Text(summary.isEmpty ? '尚未选择模型' : summary, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600))),
+          ]),
+          const SizedBox(height: 4),
+          Text(baseUrl.isEmpty ? '尚未填写 Base URL' : baseUrl, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: tokens.mutedText)),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openInterface(context),
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('配置接口与模型'),
+            ),
+          ),
+        ]),
+      )),
+      _FullWidth(_RoleSection(bridge: widget.bridge)),
+    ]);
+  }
+}
+
+/// AI 接口配置：历史配置、接口地址、模型、QQ 凭据都在这一页。
+/// 从 AI 页的“接口配置”卡片进来，改完保存后返回即可。
+class _InterfacePage extends StatefulWidget {
+  const _InterfacePage({required this.bridge, this.onSaved});
+  final RuntimeBridge bridge;
+  final VoidCallback? onSaved;
+  @override
+  State<_InterfacePage> createState() => _InterfacePageState();
+}
+
+class _InterfacePageState extends State<_InterfacePage> {
   static const protocols = <String>['', 'openai-compatible', 'openai-responses', 'anthropic-messages'];
   final protocol = TextEditingController();
   final model = TextEditingController();
@@ -1133,36 +1206,12 @@ class _ConfigPageState extends State<_ConfigPage> {
     } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('拉取模型失败：$error'))); }
     finally { if (mounted) setState(() => loadingModels = false); }
   }
-  /// 角色卡和 AI 接口都属于“让模型怎么说话”，但字段多，单独一页更好改。
-  void _openRoles(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => Scaffold(
-        appBar: AppBar(title: const Text('角色卡')),
-        body: _RolePage(bridge: widget.bridge),
-      ),
-    ));
-  }
   @override
   Widget build(BuildContext context) {
     final tokens = AppSurfaceTokens.of(context);
-    return _pageBody(context, [
-      AppCard(
-        title: '角色卡',
-        trailing: Icon(Icons.person_outline, size: 20, color: tokens.mutedText),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('聊天使用的人格提示词。切换角色不会清空对话：同一个群或私聊始终共用一份记忆。', style: TextStyle(fontSize: 12.5, height: 1.5, color: tokens.mutedText)),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _openRoles(context),
-              icon: const Icon(Icons.tune, size: 18),
-              label: const Text('打开角色卡设置'),
-            ),
-          ),
-        ]),
-      ),
-      const SizedBox(height: 12),
+    return Scaffold(
+      appBar: AppBar(title: const Text('AI 接口')),
+      body: _pageBody(context, [
       if (history.isNotEmpty) ...[
         AppCard(
           title: '历史配置',
@@ -1224,7 +1273,8 @@ class _ConfigPageState extends State<_ConfigPage> {
       ),
       const SizedBox(height: 16),
       SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: !loading && !saving && !testingEndpoint && !testingRequest && !testingQq ? _save : null, icon: const Icon(Icons.save_outlined, size: 18), label: Text(saving ? '正在保存…' : '保存配置'))),
-    ]);
+    ]),
+    );
   }
 
   /// 设置页里真正生效的协议：Base URL 指向 DeepSeek 时自动锁定为 OpenAI 兼容，
@@ -1285,22 +1335,39 @@ class _SettingsPageState extends State<_SettingsPage> {
   double downloadProgress = 0;
   bool downloadPaused = false;
   UpdateDownloadController? downloadController;
+  /// 主动回复摘要：设置页只显示状态，具体参数在子页面里改。
+  bool proactiveEnabled = false;
+  bool proactiveLoaded = false;
+  int proactiveProbability = 0;
+  int proactiveToday = 0;
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { updateUrl.dispose(); super.dispose(); }
   double _snapOpacity(double value) => [0.7, 0.85, 1.0].reduce((a, b) => (value - a).abs() < (value - b).abs() ? a : b);
-  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = defaultUpdateManifestUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); }
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = defaultUpdateManifestUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); await _loadProactiveSummary(); }
+  Future<void> _loadProactiveSummary() async {
+    try {
+      final config = await widget.bridge.proactiveReplyConfig();
+      final status = await widget.bridge.proactiveReplyStatus();
+      final today = status.groups.fold<int>(0, (sum, group) => sum + group.today);
+      if (mounted) setState(() { proactiveEnabled = config.global.enabled; proactiveProbability = config.global.probability; proactiveToday = today; proactiveLoaded = true; });
+    } catch (_) {
+      // 读数失败时保持“状态未知”，不假装已关闭。
+      if (mounted) setState(() => proactiveLoaded = false);
+    }
+  }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
   /// 主动回复字段多、还有群级覆盖，单独一页比塞进设置卡片更清楚；从设置页进去。
-  void _openProactiveReply(BuildContext context) {
-    Navigator.of(context).push(MaterialPageRoute(
+  Future<void> _openProactiveReply(BuildContext context) async {
+    await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => Scaffold(
         appBar: AppBar(title: const Text('主动回复')),
         body: ProactiveReplyPage(bridge: widget.bridge),
       ),
     ));
+    if (mounted) await _loadProactiveSummary();
   }
   Future<void> _install() async {
     setState(() => installing = true);
@@ -1385,11 +1452,51 @@ class _SettingsPageState extends State<_SettingsPage> {
         ]),
       ),
       const SizedBox(height: 12),
-      AppCard(child: Column(children: [
-        _kvRow(context, '应用版本', '${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'),
-        Divider(height: 18, color: AppSurfaceTokens.of(context).outline),
-        _kvRow(context, '运行 ABI', info['abi'] ?? '读取中'),
-      ])),
+      AppCard(
+        title: '主动回复',
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+          decoration: BoxDecoration(
+            color: (proactiveEnabled ? AppThemeTokens.of(context).success : AppSurfaceTokens.of(context).mutedText).withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            !proactiveLoaded ? '状态未知' : (proactiveEnabled ? '已开启' : '已关闭'),
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: proactiveEnabled ? AppThemeTokens.of(context).success : AppSurfaceTokens.of(context).mutedText),
+          ),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.forum_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                !proactiveLoaded
+                    ? '读取主动回复状态…'
+                    : proactiveEnabled
+                        ? '采样概率 $proactiveProbability% · 今日已发 $proactiveToday 条'
+                        : '只回复 @ 消息，不会自己插话',
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text('群里没人 @ 机器人时，按概率和冷却规则偶尔插一句话。可分别设置全局默认和单个群。', style: TextStyle(fontSize: 12, color: AppSurfaceTokens.of(context).mutedText)),
+            ])),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _openProactiveReply(context),
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('打开主动回复设置'),
+            ),
+          ),
+        ]),
+      ),
       const SizedBox(height: 12),
       AppCard(
         title: '后台运行',
@@ -1400,20 +1507,66 @@ class _SettingsPageState extends State<_SettingsPage> {
         ]),
       ),
       const SizedBox(height: 12),
-      AppCard(
-        title: '主动回复',
-        trailing: Icon(Icons.forum_outlined, size: 20, color: AppSurfaceTokens.of(context).mutedText),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('群里没人 @ 机器人时，按概率和冷却规则偶尔插一句话；可分别设置全局默认和单个群。这里只管主动插话，普通 @ 回复不受它的字数限制。', style: TextStyle(fontSize: 12.5, height: 1.5, color: AppSurfaceTokens.of(context).mutedText)),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _openProactiveReply(context),
-              icon: const Icon(Icons.tune, size: 18),
-              label: const Text('打开主动回复设置'),
-            ),
+      AppCard(child: Column(children: [
+        _kvRow(context, '应用版本', '${info['versionName'] ?? '读取中'} (${info['versionCode'] ?? '-'})'),
+        Divider(height: 18, color: AppSurfaceTokens.of(context).outline),
+        _kvRow(context, '运行 ABI', info['abi'] ?? '读取中'),
+      ])),
+      const SizedBox(height: 12),
+      Material(
+        color: Theme.of(context).cardTheme.color,
+        borderRadius: BorderRadius.circular(cardRadius),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(cardRadius),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _TutorialPage())),
+          child: Container(
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(cardRadius), border: Border.all(color: AppSurfaceTokens.of(context).outline)),
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+            child: Row(children: [
+              const Icon(Icons.menu_book_outlined, size: 20),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('说明与教程', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+              Icon(Icons.chevron_right, color: AppSurfaceTokens.of(context).mutedText),
+            ]),
           ),
+        ),
+      ),
+
+      const SizedBox(height: 12),
+      AppCard(
+        title: '配置备份',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file, size: 18), label: const Text('导出备份'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open, size: 18), label: const Text('导入备份'))),
+          ]),
+          if (backups.isEmpty) Padding(padding: const EdgeInsets.only(top: 10), child: Text('暂无自动备份', style: TextStyle(fontSize: 12.5, color: AppSurfaceTokens.of(context).mutedText)))
+          else ...[
+            const SizedBox(height: 6),
+            for (final backup in backups)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(children: [
+                  const Icon(Icons.backup_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${backup['name'] ?? '自动备份'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                    Text('${((backup['size'] as num?)?.toInt() ?? 0) ~/ 1024} KB', style: TextStyle(fontSize: 11.5, color: AppSurfaceTokens.of(context).mutedText)),
+                  ])),
+                  TextButton(onPressed: () => _restoreBackup(backup), child: const Text('恢复')),
+                ]),
+              ),
+          ],
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '数据清理',
+        child: Column(children: [
+          _dangerRow(context, '清除日志', () => _clearData('logs', '清除 Runtime 日志？', '只删除输出日志，不影响配置和会话。')),
+          _dangerRow(context, '清除会话', () => _clearData('sessions', '清除会话？', '会删除 Runtime 会话索引和上下文，不能恢复。')),
+          _dangerRow(context, '清除全部配置', () => _clearData('all', '清除全部配置？', '将删除 AI/QQ 凭据、外观设置、默认角色卡和历史配置，操作不可恢复。')),
         ]),
       ),
       const SizedBox(height: 12),
@@ -1453,51 +1606,6 @@ class _SettingsPageState extends State<_SettingsPage> {
           SizedBox(width: double.infinity, child: OutlinedButton.icon(onPressed: installing ? null : _install, icon: installing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.install_mobile, size: 18), label: const Text('从本地 APK 更新'))),
         ]),
       ),
-      const SizedBox(height: 12),
-      AppCard(
-        title: '配置备份',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _exportBackup, icon: const Icon(Icons.upload_file, size: 18), label: const Text('导出备份'))),
-            const SizedBox(width: 8),
-            Expanded(child: OutlinedButton.icon(onPressed: _importBackup, icon: const Icon(Icons.file_open, size: 18), label: const Text('导入备份'))),
-          ]),
-          if (backups.isEmpty) Padding(padding: const EdgeInsets.only(top: 10), child: Text('暂无自动备份', style: TextStyle(fontSize: 12.5, color: AppSurfaceTokens.of(context).mutedText)))
-          else ...[
-            const SizedBox(height: 6),
-            for (final backup in backups)
-              ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.backup_outlined, size: 18), title: Text('${backup['name'] ?? '自动备份'}', style: const TextStyle(fontSize: 13)), subtitle: Text('${((backup['size'] as num?)?.toInt() ?? 0) ~/ 1024} KB', style: const TextStyle(fontSize: 11.5)), trailing: TextButton(onPressed: () => _restoreBackup(backup), child: const Text('恢复'))),
-          ],
-        ]),
-      ),
-      const SizedBox(height: 12),
-      AppCard(
-        title: '数据清理',
-        child: Column(children: [
-          _dangerRow(context, '清除日志', () => _clearData('logs', '清除 Runtime 日志？', '只删除输出日志，不影响配置和会话。')),
-          _dangerRow(context, '清除会话', () => _clearData('sessions', '清除会话？', '会删除 Runtime 会话索引和上下文，不能恢复。')),
-          _dangerRow(context, '清除全部配置', () => _clearData('all', '清除全部配置？', '将删除 AI/QQ 凭据、外观设置、默认角色卡和历史配置，操作不可恢复。')),
-        ]),
-      ),
-      const SizedBox(height: 12),
-      Material(
-        color: Theme.of(context).cardTheme.color,
-        borderRadius: BorderRadius.circular(cardRadius),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(cardRadius),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _TutorialPage())),
-          child: Container(
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(cardRadius), border: Border.all(color: AppSurfaceTokens.of(context).outline)),
-            padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-            child: Row(children: [
-              const Icon(Icons.menu_book_outlined, size: 20),
-              const SizedBox(width: 12),
-              const Expanded(child: Text('说明与教程', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-              Icon(Icons.chevron_right, color: AppSurfaceTokens.of(context).mutedText),
-            ]),
-          ),
-        ),
-      ),
     ]);
   }
 
@@ -1522,13 +1630,15 @@ class _SettingsPageState extends State<_SettingsPage> {
 
 }
 
-class _RolePage extends StatefulWidget {
-  const _RolePage({required this.bridge});
+/// 角色卡区块：直接铺在 AI 页里，不再单独成页。
+/// 自己不带滚动容器，交给 `_pageBody` 统一滚动；宽屏时自己排两列。
+class _RoleSection extends StatefulWidget {
+  const _RoleSection({required this.bridge});
   final RuntimeBridge bridge;
-  @override State<_RolePage> createState() => _RolePageState();
+  @override State<_RoleSection> createState() => _RoleSectionState();
 }
 
-class _RolePageState extends State<_RolePage> {
+class _RoleSectionState extends State<_RoleSection> {
   final roleId = TextEditingController();
   final roleName = TextEditingController();
   final rolePrompt = TextEditingController();
@@ -1663,7 +1773,7 @@ class _RolePageState extends State<_RolePage> {
   @override
   Widget build(BuildContext context) {
     final tokens = AppSurfaceTokens.of(context);
-    return _pageBody(context, [
+    final cards = <Widget>[
       Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: [tokens.heroStart, tokens.heroEnd], begin: Alignment.topLeft, end: Alignment.bottomRight),
@@ -1741,12 +1851,17 @@ class _RolePageState extends State<_RolePage> {
           const SizedBox(height: 10),
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              title: Text('高级选项：角色 ID', style: TextStyle(fontSize: 13, color: tokens.mutedText)),
-              subtitle: Text(roleId.text.isEmpty ? '保存时自动生成' : roleId.text, style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: tokens.mutedText)),
-              children: [TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', hintText: 'custom.my-role'))],
+            // ExpansionTile 内部用 ListTile，需要一个不含背景色的 Material 宿主，
+            // 否则会断言「ink splashes 可能不可见」（AppCard 的底色挡在中间）。
+            child: Material(
+              type: MaterialType.transparency,
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                title: Text('高级选项：角色 ID', style: TextStyle(fontSize: 13, color: tokens.mutedText)),
+                subtitle: Text(roleId.text.isEmpty ? '保存时自动生成' : roleId.text, style: TextStyle(fontSize: 11.5, fontFamily: 'monospace', color: tokens.mutedText)),
+                children: [TextField(controller: roleId, enabled: !loading, decoration: const InputDecoration(labelText: '角色 ID', hintText: 'custom.my-role'))],
+              ),
             ),
           ),
           Row(children: [
@@ -1770,7 +1885,11 @@ class _RolePageState extends State<_RolePage> {
           ]),
         ]),
       ),
-    ]);
+    ];
+    // 宽屏跟着页面一起排两列，窄屏单列直排。
+    return MediaQuery.sizeOf(context).width >= 1100
+        ? _twoColumns(cards)
+        : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: cards);
   }
 }
 
