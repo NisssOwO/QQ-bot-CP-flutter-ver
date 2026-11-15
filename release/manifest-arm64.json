@@ -1,10 +1,10 @@
 {
-  "versionName": "0.2.5",
-  "versionCode": 14,
+  "versionName": "0.2.24",
+  "versionCode": 33,
   "abi": "arm64-v8a",
   "minSdk": 24,
-  "sizeBytes": 192690143,
-  "sha256": "fde7ef57dc21a07c91f1a56a84bd35d6a4ab217ca69977e92f8544d7a86f18ad",
-  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.2.5/QQ-bot-CP-v0.2.5-arm64.apk",
-  "releaseNotes": "QQ-bot-CP Flutter 版 0.2.5（Android 16 arm64）。新增群聊随机主动回复：本地规则先抽样、命中才调模型，全部参数在「主动回复」页可调，支持全局默认与单群覆盖，默认关闭。总览页新增「QQ 网关连接」卡片，显示在线/心跳/重连次数/错误码，底部状态条改为显示网关真实状态。稳定性：bootstrap 与 12 个中间件逐个隔离注册，修复内置 Node 缺少 Intl 导致的启动崩溃；WebSocket 增加 HELLO 20 秒超时、HTTP 增加响应体超时；App 侧新增 60 秒看门狗，网关停滞时自动重启 Runtime。"
+  "sizeBytes": 192208321,
+  "sha256": "bb81bbbad9cd0f062e3f7199c37609ff8a85b7b3d58d6637bd20dca4ddb9a078",
+  "apkUrl": "https://github.com/NisssOwO/QQ-bot-CP-flutter-ver/releases/download/v0.2.24/QQ-bot-CP-v0.2.24-arm64.apk",
+  "releaseNotes": "QQ-bot-CP Flutter 版 0.2.24（Android 16 arm64）。\n\n新增：联网搜索。接入 DeepSeek 服务端搜索工具 deepseek_web_search，Base URL 填 DeepSeek 官方地址后，运行时自动把请求切到 OpenAI 兼容路径并关闭思考（普通搜索模式），模型自己判断要不要搜、并带引用作答，Flutter 端无需配置。代价：该模式下客户端 function 工具不能与服务端搜索共存，运行时会从请求里剔除并在日志打印被省略的工具名。\n\n新增：网关观测。新增「网关事件」页，展示只追加不覆盖的 gateway-events.jsonl，断开时区分服务端关闭帧与本地判定，跨安装保留。日志保留上限从 500 条提升到 2000 条，重启不再清空最后的错误。\n\n界面：接口类型和思考程度改为「跟随 Base URL 自动决定」，DeepSeek 地址下两个下拉置灰，避免界面显示与实际请求不一致。\n\n修复：联网搜索模式下每轮报 AI_REQUEST_INVALID（400）；工具调用标记（DSML）泄漏成聊天正文；角色卡里「不要暴露是 AI」类指令导致模型拒绝搜索。"
 }
