@@ -14,6 +14,7 @@ import '../services/log_presenter.dart';
 import '../services/public_ip_service.dart';
 import '../services/startup_stats.dart';
 import '../services/config_draft.dart';
+import '../ai/protocol_registry.dart';
 import '../services/background_tasks.dart';
 import '../models/update_manifest.dart';
 import '../services/update_service.dart';
@@ -195,7 +196,6 @@ class _HomeShellState extends State<HomeShell> {
       final missing = <String>[];
       if (!config.qqConfigured || config.appId.trim().isEmpty) missing.add('QQ AppID / AppSecret');
       if (!config.llmConfigured) missing.add('AI API Key');
-      if (config.protocol.trim().isEmpty) missing.add('接口类型');
       if (config.model.trim().isEmpty) missing.add('模型名称');
       if (config.baseUrl.trim().isEmpty) missing.add('Base URL');
       if (missing.isNotEmpty) {
@@ -1041,13 +1041,13 @@ class _ConfigPageState extends State<_ConfigPage> {
     try {
       final enteredSecret = _credentialValue(secret);
       final enteredApiKey = _credentialValue(apiKey);
-      await widget.bridge.saveConfig(protocol: protocol.text.trim(), model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: thinkingLevel, appId: appId.text.trim(), secret: enteredSecret, apiKey: enteredApiKey);
+      await widget.bridge.saveConfig(protocol: _effectiveProtocol, model: model.text.trim(), baseUrl: baseUrl.text.trim(), thinkingLevel: _effectiveThinkingLevel, appId: appId.text.trim(), secret: enteredSecret, apiKey: enteredApiKey);
       final nextHistory = await widget.bridge.configHistory();
       if (secret.text.isNotEmpty) secret.text = _savedMask;
       if (apiKey.text.isNotEmpty) apiKey.text = _savedMask;
       qqConfigured = qqConfigured || enteredSecret.isNotEmpty;
       llmConfigured = llmConfigured || enteredApiKey.isNotEmpty;
-      savedProtocol = protocol.text.trim(); savedModel = model.text.trim(); savedBaseUrl = baseUrl.text.trim(); savedAppId = appId.text.trim(); savedThinkingLevel = thinkingLevel;
+      savedProtocol = _effectiveProtocol; savedModel = model.text.trim(); savedBaseUrl = baseUrl.text.trim(); savedAppId = appId.text.trim(); savedThinkingLevel = _effectiveThinkingLevel;
       if (mounted) setState(() { history = nextHistory; selectedHistory = nextHistory.isEmpty ? null : 0; });
       widget.onSaved?.call();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('配置已保存到 Android Keystore')));
@@ -1068,13 +1068,13 @@ class _ConfigPageState extends State<_ConfigPage> {
     }
   }
   Future<void> _testRequest() async {
-    if (protocol.text.trim().isEmpty || baseUrl.text.trim().isEmpty || model.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写接口类型、Base URL 和模型名称')));
+    if (baseUrl.text.trim().isEmpty || model.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先填写 Base URL 和模型名称')));
       return;
     }
     setState(() { testingRequest = true; requestTest = null; });
     try {
-      final result = await widget.bridge.testLlmRequest(protocol: protocol.text.trim(), baseUrl: baseUrl.text.trim(), model: model.text.trim(), apiKey: _credentialValue(apiKey));
+      final result = await widget.bridge.testLlmRequest(protocol: _effectiveProtocol, baseUrl: baseUrl.text.trim(), model: model.text.trim(), apiKey: _credentialValue(apiKey));
       if (mounted) setState(() { testingRequest = false; requestTest = result; });
     } catch (error) {
       if (mounted) setState(() { testingRequest = false; requestTest = EndpointTestResult(ok: false, stage: '测试请求', message: '$error'); });
@@ -1134,7 +1134,7 @@ class _ConfigPageState extends State<_ConfigPage> {
       AppCard(
         title: 'AI 接口',
         child: Column(children: [
-          DropdownButtonFormField<String>(key: ValueKey('protocol-${protocol.text}'), initialValue: protocols.contains(protocol.text) ? protocol.text : '', decoration: const InputDecoration(labelText: '接口类型'), items: protocols.map((item) => DropdownMenuItem<String>(value: item, child: Text(item.isEmpty ? '请选择接口类型' : item))).toList(), onChanged: (value) { if (value != null) setState(() => protocol.text = value); }),
+          DropdownButtonFormField<String>(key: ValueKey('protocol-$_effectiveProtocol-${_protocolLocked ? 'locked' : 'free'}'), initialValue: _effectiveProtocol, decoration: InputDecoration(labelText: '接口类型', helperText: _protocolLocked ? '已自动跟随 Base URL：DeepSeek 固定走 OpenAI 兼容（completions）路径，服务端联网搜索只在这条路径生效' : 'Base URL 填 DeepSeek 地址时会自动切换并锁定为 OpenAI 兼容', helperMaxLines: 2), items: protocols.where((item) => item.isNotEmpty).map((item) => DropdownMenuItem<String>(value: item, child: Text(item))).toList(), onChanged: _protocolLocked ? null : (value) { if (value != null) setState(() => protocol.text = value); }),
           const SizedBox(height: 12),
           _field(baseUrl, 'Base URL', 'https://api.example.com/v1', onChanged: (_) => setState(() { requestTest = null; })),
           _credentialField(apiKey, 'AI API Key', llmConfigured ? '已保存；点击后可替换' : '未保存，请填写', onChanged: (_) => setState(() { requestTest = null; })),
@@ -1152,7 +1152,7 @@ class _ConfigPageState extends State<_ConfigPage> {
             const SizedBox(width: 10),
             Padding(padding: const EdgeInsets.only(top: 4), child: OutlinedButton(onPressed: loadingModels || baseUrl.text.trim().isEmpty ? null : _fetchModels, child: loadingModels ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('拉取模型'))),
           ]),
-          DropdownButtonFormField<String>(key: ValueKey('thinking-$thinkingLevel'), initialValue: const ['off', 'low', 'medium', 'high'].contains(thinkingLevel) ? thinkingLevel : 'medium', decoration: const InputDecoration(labelText: '思考程度'), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: (value) { if (value != null) setState(() => thinkingLevel = value); }),
+          DropdownButtonFormField<String>(key: ValueKey('thinking-$_effectiveThinkingLevel-${_thinkingLocked ? 'locked' : 'free'}'), initialValue: _effectiveThinkingLevel, decoration: InputDecoration(labelText: '思考程度', helperText: _thinkingLocked ? '已自动跟随接口：DeepSeek 的联网搜索固定走普通模式，思考程度无法调高' : '接口不锁定思考程度，运行时按接口默认行为处理', helperMaxLines: 2), items: const [DropdownMenuItem(value: 'off', child: Text('关闭')), DropdownMenuItem(value: 'low', child: Text('低')), DropdownMenuItem(value: 'medium', child: Text('中')), DropdownMenuItem(value: 'high', child: Text('高'))], onChanged: _thinkingLocked ? null : (value) { if (value != null) setState(() => thinkingLevel = value); }),
           const SizedBox(height: 12),
           SizedBox(width: double.infinity, child: FilledButton.tonalIcon(onPressed: testingRequest || model.text.trim().isEmpty ? null : _testRequest, icon: testingRequest ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_circle_outline, size: 18), label: const Text('测试请求（发送一条 ping）'))),
           if (requestTest != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text('${requestTest!.ok ? '✓' : '✕'} ${requestTest!.stage}：${requestTest!.message}${requestTest!.statusCode == null ? '' : '（HTTP ${requestTest!.statusCode}）'}${requestTest!.elapsedMs == null ? '' : ' · ${requestTest!.elapsedMs} ms'}', style: TextStyle(fontSize: 12.5, color: requestTest!.ok ? AppThemeTokens.of(context).success : AppThemeTokens.of(context).warning))),
@@ -1182,18 +1182,26 @@ class _ConfigPageState extends State<_ConfigPage> {
     ]);
   }
 
+  /// 设置页里真正生效的协议：Base URL 指向 DeepSeek 时自动锁定为 OpenAI 兼容，
+  /// 与原生 `RuntimeService.kt` 的推导保持一致。UI 显示、保存、测试都用它，
+  /// 避免"界面显示 openai-responses，运行时却走 completions"这种错位。
+  String get _effectiveProtocol => ProtocolRegistry.effectiveId(baseUrl: baseUrl.text, selected: protocol.text);
+  bool get _protocolLocked => ProtocolRegistry.isLocked(baseUrl: baseUrl.text);
+  String get _effectiveThinkingLevel => ProtocolRegistry.effectiveThinkingLevel(baseUrl: baseUrl.text, selected: thinkingLevel);
+  bool get _thinkingLocked => ProtocolRegistry.isThinkingLocked(baseUrl: baseUrl.text);
+
   String _credentialValue(TextEditingController controller) => controller.text == _savedMask ? '' : controller.text;
 
   Widget _credentialField(TextEditingController controller, String label, String hint, {ValueChanged<String>? onChanged}) => _field(controller, label, hint, obscure: true, onChanged: onChanged, onTap: () { if (controller.text == _savedMask) controller.clear(); });
 
   String get _connectionFingerprint {
     final key = _credentialValue(apiKey);
-    return '${protocol.text.trim()}|${baseUrl.text.trim().replaceAll(RegExp(r'/+$'), '')}|${key.isEmpty && llmConfigured ? '<saved>' : key}';
+    return '$_effectiveProtocol|${baseUrl.text.trim().replaceAll(RegExp(r'/+$'), '')}|${key.isEmpty && llmConfigured ? '<saved>' : key}';
   }
 
   bool get _connectionReady => endpointValidated && testedConnection == _connectionFingerprint && requestTest?.ok == true;
   bool get _hasUnsavedChanges => hasUnsavedConfigChanges(
-        current: LlmConfigDraft(protocol: protocol.text, model: model.text, baseUrl: baseUrl.text, thinkingLevel: thinkingLevel, appId: appId.text, apiKey: apiKey.text, secret: secret.text),
+        current: LlmConfigDraft(protocol: _effectiveProtocol, model: model.text, baseUrl: baseUrl.text, thinkingLevel: _effectiveThinkingLevel, appId: appId.text, apiKey: apiKey.text, secret: secret.text),
         saved: LlmConfigDraft(protocol: savedProtocol, model: savedModel, baseUrl: savedBaseUrl, thinkingLevel: savedThinkingLevel, appId: savedAppId),
       );
 
