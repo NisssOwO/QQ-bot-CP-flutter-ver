@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import org.json.JSONObject
+import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 import java.io.File
@@ -87,6 +88,11 @@ class MainActivity : FlutterActivity() {
                  "getSessionPresetOverrides" -> result.success(sessionPresetOverrides())
                  "clearSessionPresetOverrides" -> try { val error = clearSessionPresetOverrides(); if (error == null) result.success(null) else result.error("RESTART", error, null) } catch (error: Exception) { result.error("PRESET_CLEAR", error.message, null) }
                  "saveProactiveReplyConfig" -> try { saveProactiveReplyConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) } catch (error: Exception) { result.error("PROACTIVE_CONFIG", error.message, null) }
+                 "getQuietHoursConfig" -> result.success(readQuietHoursConfig())
+                 "getQuietHoursStatus" -> result.success(readQuietHoursStatus())
+                 "saveQuietHoursConfig" -> try { saveQuietHoursConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) } catch (error: Exception) { result.error("QUIET_CONFIG", error.message, null) }
+                 "setQuietHoursOverride" -> try { setQuietHoursOverride("${(call.arguments as? Map<*, *>)?.get("kind") ?: ""}".trim()); result.success(null) } catch (error: Exception) { result.error("QUIET_OVERRIDE", error.message, null) }
+                 "clearQuietHoursOverride" -> { clearQuietHoursOverride(); result.success(null) }
                 "saveConfig" -> { saveConfig(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()); result.success(null) }
                 "fetchModels" -> fetchModels(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
                 "testLlmConnection" -> testLlmConnection(call.arguments as? Map<*, *> ?: emptyMap<Any, Any>(), result)
@@ -305,11 +311,100 @@ class MainActivity : FlutterActivity() {
         if (!temp.renameTo(target)) { temp.delete(); throw IllegalStateException("无法写入主动回复配置") }
     }
 
+    // ── 静默时间（免打扰）──────────────────────────────────────────────────────
+    // 判定逻辑全在 Node 侧（runtime/.../middleware/quiet-hours.js），这里只负责
+    // 配置文件读写与「临时覆盖」的落地。覆盖状态写独立文件，Node 每次判定时读它，
+    // 因此界面上点完立刻生效，不需要重启 Runtime。
+    private fun quietHoursFile(): File = File(filesDir, ".dsh-qqbot/quiet-hours.json")
+
+    private fun quietHoursOverrideFile(): File = File(filesDir, ".dsh-qqbot/quiet-hours-override.json")
+
+    private fun quietHoursStatusFile(): File = File(filesDir, ".dsh-qqbot/quiet-hours-state.json")
+
+    private fun defaultQuietHours(): JSONObject = JSONObject()
+        .put("schemaVersion", 1)
+        .put("enabled", true)
+        .put("holidays", "cn")
+        .put("workday", JSONObject()
+            .put("weekdays", JSONArray(listOf(1, 2, 3, 4, 5)))
+            .put("windows", JSONArray().put(JSONArray().put("23:00").put("08:00"))))
+        .put("offday", JSONObject()
+            .put("windows", JSONArray().put(JSONArray().put("23:00").put("09:00"))))
+
+    private fun readQuietHoursConfig(): Map<String, Any?> {
+        val file = quietHoursFile()
+        val json = try { if (file.isFile) JSONObject(file.readText(Charsets.UTF_8)) else defaultQuietHours() } catch (_: Exception) { defaultQuietHours() }
+        if (json.optInt("schemaVersion", 1) != 1) return jsonToMap(defaultQuietHours())
+        return jsonToMap(json)
+    }
+
+    private fun saveQuietHoursConfig(values: Map<*, *>) {
+        val json = JSONObject(values)
+        require(json.optInt("schemaVersion", 1) == 1) { "不支持的静默时间配置版本" }
+        val workday = json.optJSONObject("workday")
+        val offday = json.optJSONObject("offday")
+        require(workday != null && offday != null) { "静默时间配置结构无效" }
+        require(workday.optJSONArray("windows") != null && offday.optJSONArray("windows") != null) { "静默时间配置缺少 windows" }
+        val target = quietHoursFile(); target.parentFile?.mkdirs()
+        val temp = File(target.parentFile, ".${target.name}.tmp")
+        FileOutputStream(temp).use { it.write(json.toString().toByteArray(Charsets.UTF_8)); it.fd.sync() }
+        if (!temp.renameTo(target)) { temp.delete(); throw IllegalStateException("无法写入静默时间配置") }
+    }
+
+    private fun readQuietHoursStatus(): Map<String, Any?> {
+        val file = quietHoursStatusFile()
+        return try { if (file.isFile) jsonToMap(JSONObject(file.readText(Charsets.UTF_8))) else emptyMap() } catch (_: Exception) { emptyMap() }
+    }
+
+    private fun setQuietHoursOverride(kind: String) {
+        val now = System.currentTimeMillis()
+        val until = when (kind) {
+            // 15 分钟后恢复。
+            "minutes" -> now + 15 * 60 * 1000L
+            // 跳过当前窗口：状态文件里的 until 就是当前窗口结束时刻；拿不到就退化成 1 小时。
+            "window" -> {
+                val candidate = (readQuietHoursStatus()["until"] as? Number)?.toLong() ?: 0L
+                if (candidate > now) candidate else now + 60 * 60 * 1000L
+            }
+            // 今天剩余时间都不静默。
+            "day" -> {
+                val calendar = java.util.Calendar.getInstance()
+                calendar.set(java.util.Calendar.HOUR_OF_DAY, 23)
+                calendar.set(java.util.Calendar.MINUTE, 59)
+                calendar.set(java.util.Calendar.SECOND, 59)
+                calendar.set(java.util.Calendar.MILLISECOND, 999)
+                calendar.timeInMillis
+            }
+            else -> throw IllegalArgumentException("未知的覆盖类型：$kind")
+        }
+        val payload = JSONObject().put("kind", kind).put("until", until)
+        val target = quietHoursOverrideFile(); target.parentFile?.mkdirs()
+        val temp = File(target.parentFile, ".${target.name}.tmp")
+        FileOutputStream(temp).use { it.write(payload.toString().toByteArray(Charsets.UTF_8)); it.fd.sync() }
+        if (!temp.renameTo(target)) { temp.delete(); throw IllegalStateException("无法写入静默覆盖状态") }
+    }
+
+    private fun clearQuietHoursOverride() {
+        quietHoursOverrideFile().delete()
+    }
+
     private fun jsonToMap(json: JSONObject): Map<String, Any?> {
         val map = linkedMapOf<String, Any?>()
         val keys = json.keys()
-        while (keys.hasNext()) { val key = keys.next(); val value = json.get(key); map[key] = when (value) { is JSONObject -> jsonToMap(value); org.json.JSONObject.NULL -> null; else -> value } }
+        while (keys.hasNext()) { val key = keys.next(); map[key] = jsonValue(json.get(key)) }
         return map
+    }
+
+    /**
+     * MethodChannel 只认 Kotlin/Java 基础类型与 List/Map。
+     * 直接把 org.json.JSONArray 塞进去会抛 `Unsupported value ... of type 'class org.json.JSONArray'`,
+     * 所以 JSONObject/JSONArray 都要递归转成 Map/List。
+     */
+    private fun jsonValue(value: Any?): Any? = when (value) {
+        null, org.json.JSONObject.NULL -> null
+        is JSONObject -> jsonToMap(value)
+        is JSONArray -> (0 until value.length()).map { jsonValue(value.opt(it)) }
+        else -> value
     }
 
     private fun publicConfig(): Map<String, Any?> {
@@ -712,6 +807,10 @@ class MainActivity : FlutterActivity() {
                 removeCustomRuntimePresets()
                 proactiveReplyFile().delete()
                 proactiveReplyStatusFile().delete()
+                quietHoursFile().delete()
+                quietHoursOverrideFile().delete()
+                quietHoursStatusFile().delete()
+                File(filesDir, ".dsh-qqbot/holidays-cn.json").delete()
             }
         }
     }

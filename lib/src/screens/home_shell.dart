@@ -8,6 +8,7 @@ import '../models/endpoint_test_result.dart';
 import '../models/runtime_state.dart';
 import '../models/gateway_status.dart';
 import '../models/role_card.dart';
+import '../models/quiet_hours.dart';
 import '../services/runtime_bridge.dart';
 import '../services/role_id.dart';
 import '../services/log_presenter.dart';
@@ -24,6 +25,7 @@ import '../theme/theme_bridge.dart';
 import '../theme/app_theme_tokens.dart';
 import '../theme/app_theme.dart';
 import 'proactive_reply_page.dart' show ProactiveReplyPage;
+import 'quiet_hours_page.dart' show QuietHoursPage;
 import 'gateway_events_page.dart' show GatewayEventsPage;
 
 class HomeShell extends StatefulWidget {
@@ -57,6 +59,7 @@ class _HomeShellState extends State<HomeShell> {
   bool _ipLoading = false;
   bool _hidePublicIp = false;
   String? _lastSeenIpv4;
+  QuietHoursStatus _quietStatus = const QuietHoursStatus();
 
   @override
   void initState() {
@@ -78,6 +81,7 @@ class _HomeShellState extends State<HomeShell> {
     _loadRecentLogs();
     _refreshState();
     _refreshConfig();
+    _refreshQuietHours();
     _refreshSessionRoles();
     _refreshPublicIp();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoStartRuntime());
@@ -94,6 +98,7 @@ class _HomeShellState extends State<HomeShell> {
       if (!mounted) return;
       // 网关状态独立于启动阶段刷新：进程活着但连接掉了，这里才看得出来。
       unawaited(_refreshGateway());
+      unawaited(_refreshQuietHours());
       final state = _state;
       if (state.status != RuntimeStatus.starting && state.status != RuntimeStatus.reconnecting) {
         _lastStageProgressAt = null;
@@ -187,6 +192,23 @@ class _HomeShellState extends State<HomeShell> {
       if (changed) setState(() => _gateway = gateway);
     } catch (_) {}
   }
+  /// 静默状态跟着网关一起轮询；只在变化时重建，避免每 5 秒无意义刷新总览页。
+  Future<void> _refreshQuietHours() async {
+    try {
+      final status = await _bridge.quietHoursStatus();
+      if (!mounted) return;
+      // state / until 已经能区分覆盖的开始、切换与结束，无需再比 override 细节。
+      final changed = status.loaded != _quietStatus.loaded ||
+          status.state != _quietStatus.state ||
+          status.dayKind != _quietStatus.dayKind ||
+          status.windowLabel != _quietStatus.windowLabel ||
+          status.until != _quietStatus.until ||
+          status.holidayName != _quietStatus.holidayName;
+      if (changed) setState(() => _quietStatus = status);
+    } catch (_) {
+      // 运行时没起来时读不到状态，总览行保持“未知”即可，不弹提示。
+    }
+  }
   Future<void> _refreshSessionRoles() async {
   }
 
@@ -276,7 +298,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final startupStats = summarizeStartup(_logs);
     final pages = <Widget>[
-      _OverviewPage(state: _state, gateway: _gateway, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart()),
+      _OverviewPage(state: _state, gateway: _gateway, startupStats: startupStats, publicIp: _publicIp, publicIpv6: _publicIpv6, ipCheckedAt: _ipCheckedAt, ipChangedAt: _ipChangedAt, loadingIp: _ipLoading, hideIp: _hidePublicIp, qqConfigured: _publicConfig.qqConfigured, llmConfigured: _publicConfig.llmConfigured, onRefreshIp: _refreshPublicIp, onCopyIp: _copyPublicIp, onToggleHideIp: () => setState(() => _hidePublicIp = !_hidePublicIp), onOpenAi: () => setState(() => _index = 1), onRestart: () => _restart(), quietStatus: _quietStatus),
       _AiPage(bridge: _bridge, onSaved: _refreshConfig),
       _LogPage(logs: _logs, onClear: _clearLogs, bridge: _bridge),
       _SettingsPage(bridge: _bridge, onThemeChanged: widget.onThemeChanged),
@@ -365,8 +387,10 @@ Widget _twoColumns(List<Widget> children) {
   ]);
 }
 
+String _quietTime(DateTime? value) => value == null ? '—' : '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
+
 class _OverviewPage extends StatelessWidget {
-  const _OverviewPage({required this.state, required this.gateway, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.ipCheckedAt, required this.ipChangedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart});
+  const _OverviewPage({required this.state, required this.gateway, required this.startupStats, required this.publicIp, required this.publicIpv6, required this.ipCheckedAt, required this.ipChangedAt, required this.loadingIp, required this.hideIp, required this.qqConfigured, required this.llmConfigured, required this.onRefreshIp, required this.onCopyIp, required this.onToggleHideIp, required this.onOpenAi, required this.onRestart, this.quietStatus = const QuietHoursStatus()});
   final RuntimeState state;
   final GatewayStatus gateway;
   final StartupStats startupStats;
@@ -383,6 +407,8 @@ class _OverviewPage extends StatelessWidget {
   final VoidCallback onToggleHideIp;
   final VoidCallback onOpenAi;
   final VoidCallback onRestart;
+  /// 静默状态由 HomeShell 轮询传入，_OverviewPage 自己不去读 bridge。
+  final QuietHoursStatus quietStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -452,6 +478,8 @@ class _OverviewPage extends StatelessWidget {
         _statusLine(context, 'QQ 官方机器人', qqConfigured ? 'AppID 与 AppSecret 已配置' : '等待填写 AppID 与 AppSecret', qqConfigured),
         Divider(height: 20, color: tokens.outline),
         _statusLine(context, 'AI 接口', llmConfigured ? 'API Key 已配置' : '等待填写 API Key', llmConfigured),
+        Divider(height: 20, color: tokens.outline),
+        _statusLine(context, _quietTitle(), _quietSubtitle(), quietStatus.loaded && !quietStatus.isQuiet),
       ])),
       const SizedBox(height: 12),
       AppCard(child: Wrap(spacing: 8, runSpacing: 8, children: [
@@ -469,6 +497,26 @@ class _OverviewPage extends StatelessWidget {
         child: Column(children: [for (final command in _chatCommands) _CommandCopyRow(command: command.$1, description: command.$2)]),
       ),
     ]);
+  }
+
+  /// 总览只给一行结论：静默状态 + 当前窗口；细节留到设置页的子页面。
+  String _quietTitle() {
+    final status = quietStatus;
+    if (!status.loaded) return '静默';
+    final until = status.until;
+    final suffix = status.isQuiet && until != null ? '（到 ${_quietTime(until)}）' : '';
+    return '静默 · ${status.stateLabel}$suffix';
+  }
+
+  String _quietSubtitle() {
+    final status = quietStatus;
+    if (!status.loaded) return '尚未与运行时通信';
+    final day = status.holidayName.isNotEmpty
+        ? '法定节假日：${status.holidayName}'
+        : status.dayKind == 'workday'
+            ? '工作日'
+            : '周末';
+    return status.windowLabel.isEmpty ? day : '$day · 窗口 ${status.windowLabel}';
   }
 
   /// 底部状态 pill 用网关的真实状态，避免把「进程还活着」显示成「在线」。
@@ -1340,12 +1388,14 @@ class _SettingsPageState extends State<_SettingsPage> {
   bool proactiveLoaded = false;
   int proactiveProbability = 0;
   int proactiveToday = 0;
+  /// 静默时间摘要：设置页只显示状态，时间段在子页面里编辑。
+  QuietHoursStatus _quietStatus = const QuietHoursStatus();
   @override
   void initState() { super.initState(); _load(); }
   @override
   void dispose() { updateUrl.dispose(); super.dispose(); }
   double _snapOpacity(double value) => [0.7, 0.85, 1.0].reduce((a, b) => (value - a).abs() < (value - b).abs() ? a : b);
-  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = defaultUpdateManifestUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); await _loadProactiveSummary(); }
+  Future<void> _load() async { final value = await widget.bridge.appInfo(); final saved = await ThemeBridge.load(); final savedBackups = await widget.bridge.backups(); if (mounted) setState(() { info = value; backups = savedBackups; updateUrl.text = defaultUpdateManifestUrl; themeMode = saved.mode; seedColor = saved.seedColor; cardRadius = saved.cardRadius; cardOpacity = _snapOpacity(saved.cardOpacity); tintedBackground = saved.tintedBackground; }); await _loadProactiveSummary(); await _loadQuietHours(); }
   Future<void> _loadProactiveSummary() async {
     try {
       final config = await widget.bridge.proactiveReplyConfig();
@@ -1356,6 +1406,33 @@ class _SettingsPageState extends State<_SettingsPage> {
       // 读数失败时保持“状态未知”，不假装已关闭。
       if (mounted) setState(() => proactiveLoaded = false);
     }
+  }
+  Future<void> _loadQuietHours() async {
+    try {
+      final status = await widget.bridge.quietHoursStatus();
+      if (mounted) setState(() => _quietStatus = status);
+    } catch (_) {
+      // 读不到时显示“状态未知”，不要假装正常。
+      if (mounted) setState(() => _quietStatus = const QuietHoursStatus());
+    }
+  }
+  /// 时间段编辑单独一页，设置页只保留状态摘要。
+  Future<void> _openQuietHours(BuildContext context) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => QuietHoursPage(bridge: widget.bridge),
+    ));
+    if (mounted) await _loadQuietHours();
+  }
+  String _quietSummary() {
+    final status = _quietStatus;
+    if (!status.loaded) return '读取静默时间状态…';
+    final day = status.holidayName.isNotEmpty
+        ? '法定节假日 ${status.holidayName}'
+        : status.dayKind == 'workday'
+            ? '工作日'
+            : '周末';
+    final window = status.windowLabel.isEmpty ? '' : ' ${status.windowLabel}';
+    return '${status.stateLabel} · $day$window';
   }
   void _applyTheme() { final settings = ThemeSettings(mode: themeMode, seedColor: seedColor, cardRadius: cardRadius, cardOpacity: cardOpacity, tintedBackground: tintedBackground); widget.onThemeChanged?.call(settings); setState(() { recentThemes = [settings, ...recentThemes.where((item) => item.mode != settings.mode || item.seedColor != settings.seedColor || item.cardRadius != settings.cardRadius).take(4)]; }); }
   void _resetTheme() { setState(() { themeMode = ThemeMode.dark; seedColor = const Color(0xff8290ff); cardRadius = 16; cardOpacity = 1; tintedBackground = false; }); _applyTheme(); }
@@ -1493,6 +1570,45 @@ class _SettingsPageState extends State<_SettingsPage> {
               onPressed: () => _openProactiveReply(context),
               icon: const Icon(Icons.tune, size: 18),
               label: const Text('打开主动回复设置'),
+            ),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      AppCard(
+        title: '静默时间',
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+          decoration: BoxDecoration(
+            color: (_quietStatus.isQuiet ? AppThemeTokens.of(context).warning : AppSurfaceTokens.of(context).mutedText).withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            !_quietStatus.loaded ? '状态未知' : _quietStatus.stateLabel,
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: _quietStatus.isQuiet ? AppThemeTokens.of(context).warning : AppSurfaceTokens.of(context).mutedText),
+          ),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.bedtime_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_quietSummary(), style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text('静默期间不主动插话；被 @ 和私聊消息照常回复。', style: TextStyle(fontSize: 12, color: AppSurfaceTokens.of(context).mutedText)),
+            ])),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _openQuietHours(context),
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('打开静默时间设置'),
             ),
           ),
         ]),

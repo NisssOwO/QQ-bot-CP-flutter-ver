@@ -8,6 +8,7 @@ import '../models/runtime_log.dart';
 import '../models/runtime_state.dart';
 import '../models/role_card.dart';
 import '../models/proactive_reply.dart';
+import '../models/quiet_hours.dart';
 
 class RuntimeBridge {
   static const _methods = MethodChannel('qq_bot_cp/runtime');
@@ -111,6 +112,29 @@ class RuntimeBridge {
   /// 请 Node 立刻在该群试发一条（跳过概率/冷却/次数）。返回请求 id，结果写在状态文件 lastTestId/lastTestResult。
   Future<String> testProactiveReply(String groupId) async =>
       await _call<String>('testProactiveReply', {'group': groupId}, const Duration(seconds: 12), 1) ?? '';
+
+  Future<QuietHoursConfig> quietHoursConfig() async {
+    final raw = await _call<Map<dynamic, dynamic>>('getQuietHoursConfig', null, const Duration(seconds: 12), 1);
+    return QuietHoursConfig.fromJson(raw ?? const {});
+  }
+
+  Future<void> saveQuietHoursConfig(QuietHoursConfig config) async {
+    await _call<void>('saveQuietHoursConfig', config.toJson(), const Duration(seconds: 12), 1);
+  }
+
+  Future<QuietHoursStatus> quietHoursStatus() async {
+    final raw = await _call<Map<dynamic, dynamic>>('getQuietHoursStatus', null, const Duration(seconds: 12), 1);
+    return QuietHoursStatus.fromJson(raw ?? const {});
+  }
+
+  /// 临时覆盖静默：kind 为 'minutes'（15 分钟）/ 'window'（跳过一个窗口）/ 'day'（今天不再静默）。
+  Future<void> setQuietHoursOverride(String kind) async {
+    await _call<void>('setQuietHoursOverride', {'kind': kind}, const Duration(seconds: 12), 1);
+  }
+
+  Future<void> clearQuietHoursOverride() async {
+    await _call<void>('clearQuietHoursOverride', null, const Duration(seconds: 12), 1);
+  }
 
   /// 各会话用 /preset 切换过的角色卡（key 为会话，如 `group:xxx`；value 为角色卡 id）。
   Future<Map<String, String>> sessionPresetOverrides() async =>

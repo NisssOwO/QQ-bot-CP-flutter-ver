@@ -186,6 +186,9 @@ object RuntimeAssetInstaller {
             // 状态快照里的 lastError 会被下一次断开覆盖，必须靠这个文件留证据。
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/gateway-events.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/middleware/proactive-reply.js",
+            // 静默时间判定（只挡主动插话）。proactive-reply.js 会 import 它，
+            // 漏了这条设备上就是「模块找不到」启动即崩，必须随包刷新。
+            "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/middleware/quiet-hours.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/inbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/transport/outbound.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/commands/session.js",
