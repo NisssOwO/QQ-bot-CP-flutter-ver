@@ -1,7 +1,9 @@
 package com.shinycolors.officialbot
 
+import android.app.Notification
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Build
@@ -48,12 +50,76 @@ class RuntimeService : Service() {
         super.onCreate()
         serviceAlive = true
         RuntimeEventBus.setContext(this)
+        RuntimeLogRecorder(this).migrateHistoryIfNeeded()
         RuntimeLogTailer.ensureStarted(this)
         coordinator = RuntimeCoordinator(this) { RuntimeProcessController(this) }
         val notifier = RuntimeNotifier(this)
-        startForeground(RuntimeNotifier.ID, notifier.build("正在启动 Runtime"))
+        startAsForeground(notifier.build("正在启动 Runtime"))
         registerNetworkCallback()
         watchdog.postDelayed(watchdogTask, GATEWAY_WATCHDOG_INTERVAL_MS)
+    }
+
+    /**
+     * 前台服务类型决定系统给的运行时长配额。
+     *
+     * `dataSync` 从 Android 14 起有累计配额（24 小时内 6 小时）。用光之后系统会调
+     * `onTimeout()`，如果应用不主动停就抛 `ForegroundServiceDidNotStopInTimeException`
+     * 直接把进程崩掉 —— 设备上那两次 APP CRASH 正是这个：
+     * `A foreground service of type dataSync did not stop within its timeout`。
+     *
+     * 这台机器人的实质是"常驻接收消息"，用 Android 14 新增的 `remoteMessaging`
+     * 才对：它没有累计时长限制。API 34 以下没有这个类型，仍用 `dataSync`
+     * （那些版本本来也不限制 dataSync）。
+     */
+    private fun startAsForeground(notification: Notification) {
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+                startForeground(
+                    RuntimeNotifier.ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
+                )
+
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+                startForeground(
+                    RuntimeNotifier.ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                )
+
+            else -> startForeground(RuntimeNotifier.ID, notification)
+        }
+    }
+
+    /** API 34：系统判定前台服务超时（配额耗尽）。 */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        handleForegroundTimeout("fgsType=$fgsType")
+    }
+
+    /** API 35+：单参版本，部分机型只回调这一个。 */
+    override fun onTimeout(startId: Int) {
+        handleForegroundTimeout("startId=$startId")
+    }
+
+    /**
+     * 走到这里说明配额已经用光。继续赖着只会让系统抛异常崩进程，
+     * 所以主动停掉服务并留下记录，让用户或下次启动恢复。
+     */
+    private fun handleForegroundTimeout(reason: String) {
+        RuntimeLogRecorder(this).record(
+            RuntimeLogRecorder.Status.STOPPED,
+            "foreground.timeout",
+            "系统判定前台服务超时（$reason），主动停止以避免进程崩溃",
+            0,
+        )
+        RuntimeEventBus.emit(
+            "error",
+            "service",
+            "系统判定前台服务超时，Runtime 已停止",
+            errorCode = "foreground_timeout",
+        )
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

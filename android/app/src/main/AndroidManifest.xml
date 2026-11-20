@@ -4,6 +4,12 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!--
+      Android 14 起 dataSync 类型有累计时长配额（24 小时内 6 小时），超时后系统会让
+      进程崩溃。这台机器人的实质是常驻接收消息，改用 remoteMessaging 类型，它不受
+      累计配额限制；dataSync 仅留给没有 remoteMessaging 的旧系统。
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
@@ -37,7 +43,7 @@
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
-        <service android:name="com.shinycolors.officialbot.RuntimeService" android:exported="false" android:foregroundServiceType="dataSync" />
+        <service android:name="com.shinycolors.officialbot.RuntimeService" android:exported="false" android:foregroundServiceType="dataSync|remoteMessaging" />
         <receiver android:name="com.shinycolors.officialbot.RuntimeWidgetProvider" android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
