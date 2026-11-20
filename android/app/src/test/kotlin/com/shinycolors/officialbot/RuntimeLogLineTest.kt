@@ -32,4 +32,18 @@ class RuntimeLogLineTest {
         assertNull(RuntimeLogLine.split("2026-11-01T13:22:33.123Z|stdout|"))
         assertNull(RuntimeLogLine.split("|stdout|missing timestamp"))
     }
+
+    @Test
+    fun `parts keeps the timestamp written by the runtime`() {
+        val parsed = RuntimeLogLine.parts("2026-11-01T13:22:33.123Z|stdout|[inbound] 收到私聊")
+        assertEquals("2026-11-01T13:22:33.123Z", parsed?.first)
+        assertEquals("stdout", parsed?.second)
+        assertEquals("[inbound] 收到私聊", parsed?.third)
+    }
+
+    @Test
+    fun `parts is the single parser behind split`() {
+        val parts = RuntimeLogLine.parts("2026-11-01T13:22:33.123Z|stderr|a|b")
+        assertEquals(parts?.second to parts?.third, RuntimeLogLine.split("2026-11-01T13:22:33.123Z|stderr|a|b"))
+    }
 }

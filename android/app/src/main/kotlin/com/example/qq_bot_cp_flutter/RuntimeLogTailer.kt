@@ -4,6 +4,9 @@ import android.content.Context
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * 记录文件日志是否真的在写，[RuntimeProcessController] 用它决定是否退回读管道。
@@ -29,15 +32,25 @@ internal object RuntimeLogLine {
      * `<ISO 时间>|<stdout|stderr|host>|<原始行>` → `stream to message`。
      * 不是这个格式时返回 null，交给调用方按原始 stdout 行处理。
      */
-    fun split(line: String): Pair<String, String>? {
+    fun split(line: String): Pair<String, String>? = parts(line)?.let { it.second to it.third }
+
+    /**
+     * 同 [split]，额外返回文件里写下的 ISO 时间戳。
+     *
+     * 时间戳必须一起取出来：早先只看 stream 与 message，于是“什么时候发生”被换成
+     * “什么时候读到”，一份昨天写下的文件被重新读一遍就会出现一批假的新时间，事后
+     * 完全分不清哪些错误是刚才发生的。
+     */
+    fun parts(line: String): Triple<String, String, String>? {
         val first = line.indexOf('|')
         if (first <= 0) return null
         val second = line.indexOf('|', first + 1)
         if (second <= first) return null
+        val stamp = line.substring(0, first).trim()
         val stream = line.substring(first + 1, second).trim()
         val message = line.substring(second + 1)
         if (message.isBlank()) return null
-        return (if (stream == "stderr") "stderr" else "stdout") to message
+        return Triple(stamp, if (stream == "stderr") "stderr" else "stdout", message)
     }
 }
 
@@ -89,6 +102,12 @@ class RuntimeLogTailer private constructor(private val context: Context) {
             return
         }
         val length = logFile.length()
+        if (offset == 0L && length > 0 && logFile.lastModified() < startedAt) {
+            // 文件是本次启动之前写下的：直接跳到末尾。日志页里已经有这批内容，
+            // 再读一遍只会把旧错误记成新时间，让人以为是刚刚发生的故障。
+            offset = length
+            return
+        }
         if (length < offset) {
             // 轮转后从新文件开头读，旧内容已经在界面里了。
             offset = 0
@@ -123,15 +142,22 @@ class RuntimeLogTailer private constructor(private val context: Context) {
 
     private fun consume(line: String) {
         if (line.isBlank()) return
-        val parsed = RuntimeLogLine.split(line)
-        if (parsed == null) record("stdout", line) else record(parsed.first, parsed.second)
+        val parsed = RuntimeLogLine.parts(line)
+        if (parsed == null) record("stdout", line, null) else record(parsed.second, parsed.third, parseStamp(parsed.first))
     }
 
-    private fun record(source: String, message: String) {
+    /** 文件里的 ISO 时间戳；解析不了就交给调用方回落到当前时刻。 */
+    private fun parseStamp(iso: String): Long? = try {
+        stampFormat.parse(iso)?.time
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun record(source: String, message: String, at: Long?) {
         // 启动握手这一行由管道记录就够了，避免日志页出现两条一样的 PID。
         if (message.startsWith("QQBOT_BOOTING")) return
         val parsed = RuntimeLogParser.parse(message, source)
-        recorder.stream(parsed.level, parsed.module, message, parsed.qq, parsed.ai, parsed.network, parsed.errorCode)
+        recorder.stream(parsed.level, parsed.module, message, parsed.qq, parsed.ai, parsed.network, parsed.errorCode, at)
     }
 
     companion object {
@@ -140,6 +166,16 @@ class RuntimeLogTailer private constructor(private val context: Context) {
         private const val MAX_READ = 256 * 1024
         private const val MAX_CARRY = 64 * 1024
         private var startedAt = System.currentTimeMillis()
+
+        /**
+         * 解析 android-log-tap.cjs 写下的 `<ISO-8601>|` 前缀。
+         *
+         * 只在 tail 线程里用，所以简单格式化的线程安全问题在这里不存在；
+         * `X` 模式自 API 24 起可用，正好是本项目的最低版本。
+         */
+        private val stampFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
 
         @Volatile private var shared: RuntimeLogTailer? = null
 

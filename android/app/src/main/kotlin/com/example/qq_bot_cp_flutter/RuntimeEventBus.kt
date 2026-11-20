@@ -26,9 +26,18 @@ object RuntimeEventBus {
         sink = events
     }
 
-    fun emit(level: String, module: String, message: String, elapsedMs: Long? = null, errorCode: String? = null) {
+    fun emit(
+        level: String,
+        module: String,
+        message: String,
+        elapsedMs: Long? = null,
+        errorCode: String? = null,
+        timeMs: Long? = null,
+    ) {
         val event = mutableMapOf<String, Any>(
-            "time" to System.currentTimeMillis().toString(),
+            // 必须是数字：写成字符串的话 Dart 侧 DateTime.tryParse 会失败，
+            // 回落到"现在"，整页日志的时间就全变成打开页面的那一刻。
+            "time" to (timeMs ?: System.currentTimeMillis()),
             "level" to level,
             "module" to module,
             "message" to message,

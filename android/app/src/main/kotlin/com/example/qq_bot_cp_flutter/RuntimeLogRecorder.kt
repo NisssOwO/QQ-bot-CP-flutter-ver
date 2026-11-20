@@ -19,6 +19,21 @@ class RuntimeLogRecorder(private val context: Context) {
     fun credentialsConfigured(): Boolean = prefs().getBoolean("credentialsConfigured", false)
 
     /**
+     * 丢掉旧版本写下的日志历史。
+     *
+     * 0.2.32 之前的 [RuntimeLogTailer] 会从文件开头重读一遍，把昨天的行记成"刚刚发生"，
+     * 于是历史里同一批错误的时刻全被改写，事后根本无法分辨新旧。这些条目的时间已经
+     * 不可信，留着只会误导排查，所以在格式修正后一次性清掉。
+     */
+    fun migrateHistoryIfNeeded() {
+        if (prefs().getInt(KEY_HISTORY_VERSION, 0) >= HISTORY_VERSION) return
+        prefs().edit()
+            .remove("logHistory")
+            .putInt(KEY_HISTORY_VERSION, HISTORY_VERSION)
+            .commit()
+    }
+
+    /**
      * Starts a new run.
      *
      * 旧实现会直接 `remove("runtimeLastError")`，于是“上次为什么失败”在重启那一刻
@@ -58,26 +73,44 @@ class RuntimeLogRecorder(private val context: Context) {
     }
 
     /** Appends one parsed process line and its per-module counters under the same lock. */
-    fun stream(level: String, module: String, message: String, qq: String?, ai: String?, network: String?, errorCode: String?) {
+    fun stream(
+        level: String,
+        module: String,
+        message: String,
+        qq: String?,
+        ai: String?,
+        network: String?,
+        errorCode: String?,
+        at: Long? = null,
+    ) {
         synchronized(RuntimeService.STAGE_LOCK) {
             val editor = prefs().edit()
             qq?.let { editor.putString("qqStatus", it) }
             ai?.let { editor.putString("aiStatus", it) }
             network?.let { editor.putString("networkStatus", it) }
-            appendHistory(editor, level, module, message, errorCode)
+            appendHistory(editor, level, module, message, errorCode, at)
             editor.commit()
         }
-        RuntimeEventBus.emit(level, module, message, errorCode = errorCode)
+        RuntimeEventBus.emit(level, module, message, errorCode = errorCode, timeMs = at)
     }
 
-    private fun appendHistory(editor: android.content.SharedPreferences.Editor, level: String, module: String, message: String, errorCode: String?) {
+    private fun appendHistory(
+        editor: android.content.SharedPreferences.Editor,
+        level: String,
+        module: String,
+        message: String,
+        errorCode: String?,
+        at: Long?,
+    ) {
         val array = try {
             JSONArray(prefs().getString("logHistory", "[]") ?: "[]")
         } catch (_: Exception) {
             JSONArray()
         }
         val entry = JSONObject()
-            .put("time", System.currentTimeMillis().toString())
+            // 有文件时间戳就用它：读到的时刻会把旧日志伪造成刚刚发生的事故。
+            // 存数字而不是字符串，Dart 侧才能直接按毫秒还原。
+            .put("time", at ?: System.currentTimeMillis())
             .put("level", level)
             .put("module", module)
             .put("message", message)
@@ -132,6 +165,15 @@ class RuntimeLogRecorder(private val context: Context) {
 
         /** SharedPreferences 里归档启动失败原因的 key。 */
         const val KEY_ERROR_HISTORY = "runtimeErrorHistory"
+
+        /**
+         * 日志历史的格式版本。
+         *
+         * 1 = 时间戳取自 runtime.log 里的 ISO 前缀（之前是读取时刻）。
+         * 版本不一致时清空历史：旧条目的时间不可信，留着会误导排查。
+         */
+        const val HISTORY_VERSION = 1
+        private const val KEY_HISTORY_VERSION = "logHistoryVersion"
 
         private val MAIN = Handler(android.os.Looper.getMainLooper())
     }

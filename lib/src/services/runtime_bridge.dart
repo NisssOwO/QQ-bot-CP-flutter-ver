@@ -35,8 +35,14 @@ class RuntimeBridge {
 
   RuntimeLogEntry _parseLog(Map raw) {
     final level = LogLevel.values.firstWhere((value) => value.name == raw['level'], orElse: () => LogLevel.info);
+    // 原生侧历史上把毫秒数当字符串写进 JSON（`"time": "1758..."`），
+    // 只认 num 或 ISO 字符串的话会解析失败，然后回落成 DateTime.now()——
+    // 于是每条旧日志都被显示成"刚刚发生"。两种形态都要接住。
     final rawTime = raw['time'];
-    final time = rawTime is num ? DateTime.fromMillisecondsSinceEpoch(rawTime.toInt()) : DateTime.tryParse('$rawTime') ?? DateTime.now();
+    final millis = rawTime is num ? rawTime.toInt() : int.tryParse('${rawTime ?? ''}');
+    final time = millis != null
+        ? DateTime.fromMillisecondsSinceEpoch(millis)
+        : DateTime.tryParse('$rawTime') ?? DateTime.now();
     return RuntimeLogEntry(time: time, level: level, module: '${raw['module'] ?? 'runtime'}', message: '${raw['message'] ?? ''}', elapsedMs: (raw['elapsedMs'] as num?)?.toInt(), runId: raw['runId'] as String?, errorCode: raw['errorCode'] as String?);
   }
 
