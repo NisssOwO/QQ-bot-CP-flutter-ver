@@ -44,6 +44,9 @@ try {
       // directory. Preload a small compatibility shim for atomic writers.
       NODE_OPTIONS: [
         process.env.NODE_OPTIONS,
+        // 裁剪版 Node 没有 ICU，连 Intl 都不存在；先补最小实现，
+        // 否则 time-context 插件加载即抛 ReferenceError。
+        `--require=${root}/android-intl-shim.cjs`,
         `--require=${root}/android-fs-compat.cjs`,
         // Keeps a durable copy of everything DSH prints; see android-log-tap.cjs.
         `--require=${root}/android-log-tap.cjs`,

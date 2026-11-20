@@ -179,6 +179,10 @@ object RuntimeAssetInstaller {
         val files = listOf(
             // 运行时日志落盘钩子：让启动之后的每一行都能在 App 里看到。
             "runtime/android-log-tap.cjs",
+            // 裁剪版 Node 没有 ICU，全局连 Intl 都不存在。runtime-entry 用
+            // --require 预加载这个最小实现，漏了它 time-context 插件加载即抛
+            // `ReferenceError: Intl is not defined`，请求里也就没有「当前时间」。
+            "runtime/android-intl-shim.cjs",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/bootstrap.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/middleware-setup.js",
             "runtime/node_modules/@tencent-connect/dsh-qqbot/dist/gateway/gateway-status.js",
